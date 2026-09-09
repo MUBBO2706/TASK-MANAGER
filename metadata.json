@@ -1,0 +1,8 @@
+{
+  "name": "SQL Migration Task Manager v19",
+  "description": "Manage and track SQL queries and edge functions during database migration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

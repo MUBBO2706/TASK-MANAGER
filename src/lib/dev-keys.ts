@@ -1,0 +1,6 @@
+export const SUPABASE_URL = "https://acnqtfkysglxoodkarpz.supabase.co/rest/v1/";
+export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjbnF0Zmt5c2dseG9vZGthcnB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMzU3NDYsImV4cCI6MjA5MzkxMTc0Nn0.GobYK6QLLCYOoyMimcQpBXIcxQGEmeDr-4DZGyigtKE";
+export const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjbnF0Zmt5c2dseG9vZGthcnB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMzU3NDYsImV4cCI6MjA5MzkxMTc0Nn0.GobYK6QLLCYOoyMimcQpBXIcxQGEmeDr-4DZGyigtKE";
+
+export const VITE_API_KEY = "sk_sync_b4k92jdm10";
+export const API_KEY = "sk_sync_b4k92jdm10";
