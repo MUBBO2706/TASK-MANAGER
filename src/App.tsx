@@ -48,7 +48,7 @@ import { DebouncedCodeEditor, DebouncedTitleInput } from "./components/SharedUI"
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { VersionControlPage, VersionControlSkeleton } from "./components/version-control";
-import SkeletonLoader from "./components/SkeletonLoader";
+import SkeletonLoader, { TaskItemSkeleton } from "./components/SkeletonLoader";
 import DiffViewerSkeleton, { NoChangesDiffSkeleton } from "./components/DiffViewerSkeleton";
 import { SqlTask, Project, ProjectSummary, VersionBackup, VersionBackupData, VersionAction } from "./types";
 import { cn } from "./lib/utils";
@@ -283,6 +283,8 @@ export default function App() {
 
   const [theme, setTheme] = useLocalStorage<"light" | "dark">("app-theme", "light");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedProjectIds, setLoadedProjectIds] = useState<Set<string>>(new Set());
+  const [isProjectTasksLoading, setIsProjectTasksLoading] = useState(false);
   const [lastVisitedTaskId, setLastVisitedTaskId] = useLocalStorage<string | null>("last-visited-task-id", null);
   const [searchQuery, setSearchQuery] = useLocalStorage("search-query", "");
   const [isSearchExpanded, setIsSearchExpanded] = useLocalStorage("search-expanded", false);
@@ -371,6 +373,7 @@ export default function App() {
 
       const updatedProjectsList = [...projects, { id: newProject.id, name: newProject.name, createdAt: newProject.created_at }];
       setProjects(updatedProjectsList);
+      setLoadedProjectIds(prev => new Set(prev).add(newProjectId));
 
       // Snapshot for version control
       const stateBefore: VersionBackupData = {
@@ -1246,6 +1249,7 @@ export default function App() {
             });
 
             setTasks(mappedTasks);
+            setLoadedProjectIds(new Set(projectIdsToFetch));
 
             if (!urlProjectId && targetProjectId) {
               navigate(`/p/${targetProjectId}`, { replace: true });
@@ -1417,10 +1421,15 @@ export default function App() {
     if (prodProj) projectIdsToFetch.push(prodProj.id);
 
     const idsNeedingFetch = projectIdsToFetch.filter(
-      id => !tasksRef.current.some(t => t.projectId === id)
+      id => !loadedProjectIds.has(id) && !tasksRef.current.some(t => t.projectId === id)
     );
 
-    if (idsNeedingFetch.length === 0) return;
+    if (idsNeedingFetch.length === 0) {
+      setIsProjectTasksLoading(false);
+      return;
+    }
+
+    setIsProjectTasksLoading(true);
 
     const loadTasksForSelectedProject = async () => {
       try {
@@ -1443,32 +1452,44 @@ export default function App() {
           tasksData = data || [];
         }
 
-        if (tasksData.length > 0 && isSubscribed) {
-          const mappedTasks: SqlTask[] = tasksData.map(t => ({
-            id: t.id,
-            title: t.title,
-            type: t.type,
-            sql: t.sql,
-            functionCode: t.function_code,
-            description: t.description,
-            edgeFiles: t.edge_files,
-            edgeSecrets: t.edge_secrets,
-            status: t.status,
-            folderId: t.folder_id,
-            projectId: t.project_id,
-            productionTaskId: t.production_task_id,
-            createdAt: t.created_at,
-            updatedAt: t.updated_at,
-            orderIndex: t.order_index
-          }));
+        if (isSubscribed) {
+          if (tasksData.length > 0) {
+            const mappedTasks: SqlTask[] = tasksData.map(t => ({
+              id: t.id,
+              title: t.title,
+              type: t.type,
+              sql: t.sql,
+              functionCode: t.function_code,
+              description: t.description,
+              edgeFiles: t.edge_files,
+              edgeSecrets: t.edge_secrets,
+              status: t.status,
+              folderId: t.folder_id,
+              projectId: t.project_id,
+              productionTaskId: t.production_task_id,
+              createdAt: t.created_at,
+              updatedAt: t.updated_at,
+              orderIndex: t.order_index
+            }));
 
-          setTasks(prev => {
-            const existingFiltered = prev.filter(t => !idsNeedingFetch.includes(t.projectId || ''));
-            return [...existingFiltered, ...mappedTasks];
+            setTasks(prev => {
+              const existingFiltered = prev.filter(t => !idsNeedingFetch.includes(t.projectId || ''));
+              return [...existingFiltered, ...mappedTasks];
+            });
+          }
+
+          setLoadedProjectIds(prev => {
+            const next = new Set(prev);
+            idsNeedingFetch.forEach(id => next.add(id));
+            return next;
           });
+          setIsProjectTasksLoading(false);
         }
       } catch (err) {
         console.warn("Failed to load on-demand project tasks", err);
+        if (isSubscribed) {
+          setIsProjectTasksLoading(false);
+        }
       }
     };
 
@@ -1477,7 +1498,7 @@ export default function App() {
     return () => {
       isSubscribed = false;
     };
-  }, [selectedProjectId, isLoading]);
+  }, [selectedProjectId, isLoading, loadedProjectIds]);
 
   // History state for Undo/Redo
   const [sqlHistory, setSqlHistory] = useState<string[]>([]);
@@ -2848,6 +2869,11 @@ export default function App() {
     return selectedProjectId ? projectMetrics[selectedProjectId] || { total: 0, sql: 0, funcs: 0, ran: 0, progress: 0 } : null;
   }, [projectMetrics, selectedProjectId]);
 
+  const isCurrentProjectLoading = Boolean(
+    isProjectTasksLoading ||
+    (selectedProjectId && !loadedProjectIds.has(selectedProjectId) && !tasks.some(t => t.projectId === selectedProjectId))
+  );
+
   if (isLoading) {
     if (isVersionControlParam) {
       return (
@@ -3277,7 +3303,15 @@ export default function App() {
             cancelLongPress();
           }}
         >
-          {filteredTasks.length === 0 ? (
+          {isCurrentProjectLoading ? (
+            <div className="divide-y divide-slate-100 dark:divide-zinc-900/40">
+              {Array.from({
+                length: Math.max(5, Math.min(10, (activeTab === "sql" ? activeMetrics?.sql : activeMetrics?.funcs) || activeMetrics?.total || 7))
+              }).map((_, idx) => (
+                <TaskItemSkeleton key={idx} index={idx} />
+              ))}
+            </div>
+          ) : filteredTasks.length === 0 ? (
             <div className="text-center p-8 text-slate-400 dark:text-slate-600">
               <Database size={32} className="mx-auto mb-3 opacity-20" />
               <p className="text-sm">No {activeTab === "sql" ? "queries" : "edge functions"} found.</p>
@@ -4134,6 +4168,7 @@ export default function App() {
                       if (prev.some(p => p.id === newProject.id)) return prev;
                       return [...prev, { id: newProject.id, name: newProject.name, createdAt: newProject.created_at }];
                     });
+                    setLoadedProjectIds(prev => new Set(prev).add(newProject.id));
 
                     // Snapshot for version control
                     const stateBefore: VersionBackupData = {
@@ -4189,6 +4224,7 @@ export default function App() {
                         if (prev.some(p => p.id === newProject.id)) return prev;
                         return [...prev, { id: newProject.id, name: newProject.name, createdAt: newProject.created_at }];
                       });
+                      setLoadedProjectIds(prev => new Set(prev).add(newProject.id));
 
                       // Snapshot for version control
                       const stateBefore: VersionBackupData = {
