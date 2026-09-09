@@ -435,18 +435,17 @@ export function VersionControlPage({
                 </>
               )}
               <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
-                <span>Version Control & Audit Timeline</span>
+                <span>Version Control</span>
               </h1>
             </div>
           </div>
 
-          {/* Right: Snapshots Badge (opposite right side) */}
-          <span className="text-[10.5px] font-bold px-2.5 py-0.5 rounded-full text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 shrink-0">
-            {groupedBackups.length} {groupedBackups.length === 1 ? "Snapshot" : "Snapshots"}
-            {versionBackups.length > groupedBackups.length && (
-              <span className="opacity-75 font-normal ml-1">({versionBackups.length} revisions)</span>
-            )}
-          </span>
+          {/* Right: Snapshots Count & Revisions Info (Plain Text with Separator) */}
+          <div className="text-xs font-semibold text-slate-500 dark:text-zinc-400 shrink-0 flex items-center gap-1.5">
+            <span>{groupedBackups.length} {groupedBackups.length === 1 ? "snapshot" : "snapshots"}</span>
+            <span className="text-slate-300 dark:text-zinc-700 font-normal">•</span>
+            <span>{versionBackups.length} {versionBackups.length === 1 ? "revision" : "revisions"}</span>
+          </div>
         </header>
       )}
 
@@ -679,7 +678,7 @@ export function VersionControlPage({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
                           {/* Action Badge & Tag & Timestamp & Stats */}
-                          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-1 flex-nowrap overflow-hidden whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 flex-nowrap overflow-hidden whitespace-nowrap">
                             <span
                               className={cn(
                                 "text-[8.5px] sm:text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1 border whitespace-nowrap",
@@ -690,27 +689,36 @@ export function VersionControlPage({
                               <span>{badge.label}</span>
                             </span>
 
+                            <span className="text-slate-300 dark:text-zinc-700 text-[9px] shrink-0">•</span>
+
                             {group.count > 1 && (
-                              <span className="text-[8.5px] sm:text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-300 bg-blue-500/15 border border-blue-500/25 shrink-0 flex items-center gap-1 whitespace-nowrap">
-                                <Layers size={10} className="stroke-[2.5]" />
-                                <span>{group.count} edits</span>
-                              </span>
+                              <>
+                                <span className="text-[10px] sm:text-[11px] font-semibold text-blue-600 dark:text-blue-400 shrink-0 whitespace-nowrap">
+                                  {group.count} edits
+                                </span>
+                                <span className="text-slate-300 dark:text-zinc-700 text-[9px] shrink-0">•</span>
+                              </>
                             )}
 
                             {isProjectDeleted && (
-                              <span className="text-[8px] sm:text-[8.5px] font-semibold px-1 py-0.5 rounded text-zinc-500 bg-zinc-500/15 border border-zinc-500/20 shrink-0 whitespace-nowrap">
-                                <span className="hidden sm:inline">Project Deleted</span>
-                                <span className="sm:hidden">Deleted</span>
-                              </span>
+                              <>
+                                <span className="text-[10px] sm:text-[11px] font-semibold text-rose-600 dark:text-rose-400 shrink-0 whitespace-nowrap">
+                                  Deleted
+                                </span>
+                                <span className="text-slate-300 dark:text-zinc-700 text-[9px] shrink-0">•</span>
+                              </>
                             )}
 
                             {backup.isUndone && (
-                              <span className="text-[8.5px] sm:text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 shrink-0 whitespace-nowrap">
-                                Undone
-                              </span>
+                              <>
+                                <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 shrink-0 whitespace-nowrap">
+                                  Undone
+                                </span>
+                                <span className="text-slate-300 dark:text-zinc-700 text-[9px] shrink-0">•</span>
+                              </>
                             )}
 
-                            <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-zinc-500 font-mono shrink-0 whitespace-nowrap ml-1.5 sm:ml-2">
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-zinc-500 font-mono shrink-0 whitespace-nowrap">
                               {new Date(backup.timestamp).toLocaleString(undefined, {
                                 month: "short",
                                 day: "numeric",

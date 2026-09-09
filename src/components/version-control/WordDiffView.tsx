@@ -107,7 +107,7 @@ export const WordDiffView: React.FC<WordDiffViewProps> = ({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-y border-slate-100 dark:border-zinc-800/60 py-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-1.5">
         {/* Old (Before) side */}
         <div className="space-y-1 min-w-0">
           <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-zinc-500 pb-0.5 border-b border-slate-100 dark:border-zinc-800/40">

@@ -182,6 +182,14 @@ export const SideBySideDiff = memo(function SideBySideDiff({
         padding: "0 1px",
         borderRadius: "2px",
       },
+      wordAdded: {
+        padding: "0 2px",
+        borderRadius: "2px",
+      },
+      wordRemoved: {
+        padding: "0 2px",
+        borderRadius: "2px",
+      },
     }),
     []
   );
@@ -192,7 +200,7 @@ export const SideBySideDiff = memo(function SideBySideDiff({
         "overflow-hidden flex flex-col select-text diff-viewer-compact w-full",
         splitView ? "is-split-view" : "is-inline-view",
         borderless
-          ? "border-y border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-[#09090b]"
+          ? "bg-white dark:bg-[#09090b]"
           : "rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#09090b]",
         className
       )}
@@ -291,7 +299,7 @@ export const SideBySideDiff = memo(function SideBySideDiff({
           newValue={newValue || ""}
           splitView={splitView}
           useDarkTheme={darkActive}
-          compareMethod={DiffMethod.LINES}
+          compareMethod={DiffMethod.CHARS}
           styles={customStyles}
           hideLineNumbers={false}
           showDiffOnly={false}

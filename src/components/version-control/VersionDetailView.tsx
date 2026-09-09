@@ -355,7 +355,7 @@ export function VersionDetailView({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white dark:bg-black overflow-y-auto min-w-0">
+    <div className="flex-1 flex flex-col h-full bg-white dark:bg-black min-w-0 overflow-hidden">
       {/* Top Sticky Header */}
       <div className="px-3 sm:px-5 py-2 sm:py-2.5 border-b border-slate-200/80 dark:border-zinc-800/80 bg-white/95 dark:bg-[#0c0c0e]/95 sticky top-0 z-20 backdrop-blur-md">
         <div className="flex items-center justify-between gap-2 min-w-0">
@@ -390,18 +390,22 @@ export function VersionDetailView({
               )}
 
               {versionGroup && versionGroup.length > 1 && (
-                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1 shrink-0 whitespace-nowrap">
-                  <Layers size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" />
-                  <span>{versionGroup.length} revisions</span>
-                </span>
+                <>
+                  <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                  <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1 shrink-0 whitespace-nowrap">
+                    <Layers size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" />
+                    <span>{versionGroup.length} revisions</span>
+                  </span>
+                </>
               )}
 
+              <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
               {version.isUndone ? (
-                <span className="text-[8.5px] sm:text-[9.5px] font-bold tracking-wider px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 shrink-0 whitespace-nowrap">
+                <span className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 font-medium shrink-0 whitespace-nowrap">
                   Undone
                 </span>
               ) : (
-                <span className="text-[8.5px] sm:text-[9.5px] font-bold tracking-wider px-1.5 py-0.5 rounded text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 shrink-0 whitespace-nowrap">
+                <span className="text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400 font-medium shrink-0 whitespace-nowrap">
                   Active
                 </span>
               )}
@@ -457,7 +461,7 @@ export function VersionDetailView({
       </div>
 
       {/* Main Specifications Content - Container-less Architecture */}
-      <div className="flex-1 p-3.5 sm:p-5 space-y-3 sm:space-y-4 overflow-y-auto">
+      <div className="flex-1 px-3.5 sm:px-5 pt-3.5 sm:pt-5 pb-0 space-y-3 sm:space-y-4 overflow-y-auto">
         {/* Scope & Targets inline bar - Containerless */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pb-3 border-b border-slate-100 dark:border-zinc-800/60">
           <div className="flex items-center gap-2 min-w-0">
@@ -620,7 +624,7 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
                                     Modified in v{versionNumber} ({revModified.length})
                                   </span>
-                                  <div className="divide-y divide-slate-100 dark:divide-zinc-800/60 border-y border-slate-100 dark:border-zinc-800/60">
+                                  <div className="divide-y divide-slate-100 dark:divide-zinc-800/60">
                                     {revModified.map((mod) => (
                                       <div key={mod.task.id} className="py-2 space-y-1.5 text-xs">
                                         <div className="flex items-center justify-between gap-2">
@@ -683,7 +687,7 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
                                     Added in v{versionNumber} (+{revAdded.length})
                                   </span>
-                                  <div className="divide-y divide-emerald-100 dark:divide-emerald-950/40 border-y border-emerald-100 dark:border-emerald-950/40">
+                                  <div className="divide-y divide-emerald-100 dark:divide-emerald-950/40">
                                     {revAdded.map((t: any) => (
                                       <div key={t.id} className="py-1.5 px-0.5 text-xs flex items-center justify-between">
                                         <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate">{t.title}</span>
@@ -700,7 +704,7 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
                                     Removed in v{versionNumber} (-{revRemoved.length})
                                   </span>
-                                  <div className="divide-y divide-rose-100 dark:divide-rose-950/40 border-y border-rose-100 dark:border-rose-950/40">
+                                  <div className="divide-y divide-rose-100 dark:divide-rose-950/40">
                                     {revRemoved.map((t: any) => (
                                       <div key={t.id} className="py-1.5 px-0.5 text-xs flex items-center justify-between">
                                         <span className="font-semibold text-slate-800 dark:text-zinc-200 line-through truncate">{t.title}</span>
@@ -869,7 +873,7 @@ export function VersionDetailView({
 
           {/* TAB 1: ACTUAL CHANGES DIFF (OLD vs NEW) */}
           {activeViewTab === "diff" && (
-            <div className="py-2.5 space-y-4">
+            <div className="pt-2.5 pb-0 space-y-4">
               {!hasAnyDiffs ? (
                 <div className="py-8 text-center text-xs text-slate-500 dark:text-zinc-400 border-y border-dashed border-slate-200 dark:border-zinc-800 my-2">
                   <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-2 opacity-80" />
@@ -895,7 +899,7 @@ export function VersionDetailView({
                         </span>
                       </div>
 
-                      <div className="divide-y divide-slate-100 dark:divide-zinc-800/70 border-y border-slate-200/80 dark:border-zinc-800/80">
+                      <div className="divide-y divide-slate-100 dark:divide-zinc-800/70">
                         {modifiedTaskDiffs.map(({ task, oldTask, oldCode, newCode, codeChanged, titleChanged, statusChanged, descriptionChanged, orderChanged }) => {
                           const isDiffExpanded = expandedDiffId === task.id;
                           const isEdge = task.type === "edge_function";
@@ -1013,7 +1017,7 @@ export function VersionDetailView({
                         </span>
                       </div>
 
-                      <div className="divide-y divide-emerald-100 dark:divide-emerald-950/50 border-y border-emerald-200/80 dark:border-emerald-950/60">
+                      <div className="divide-y divide-emerald-100 dark:divide-emerald-950/50">
                         {addedTasks.map((task: any) => {
                           const code = task.sql || task.functionCode || task.function_code || "";
                           const isEdge = task.type === "edge_function";
@@ -1079,7 +1083,7 @@ export function VersionDetailView({
                         </span>
                       </div>
 
-                      <div className="divide-y divide-rose-100 dark:divide-rose-950/50 border-y border-rose-200/80 dark:border-rose-950/60">
+                      <div className="divide-y divide-rose-100 dark:divide-rose-950/50">
                         {removedTasks.map((task: any) => {
                           const code = task.sql || task.functionCode || task.function_code || "";
                           const isEdge = task.type === "edge_function";
@@ -1140,7 +1144,7 @@ export function VersionDetailView({
                         </span>
                       </div>
 
-                      <div className="divide-y divide-slate-100 dark:divide-zinc-800/60 border-y border-slate-200/80 dark:border-zinc-800/80 text-xs">
+                      <div className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-xs">
                         <div className="py-2 px-1 flex items-center justify-between">
                           <span className="text-slate-500">Target Production Project:</span>
                           <span className="font-mono font-bold text-slate-800 dark:text-zinc-200">
@@ -1169,8 +1173,8 @@ export function VersionDetailView({
 
           {/* TAB 2: FULL STATE SNAPSHOT (ALL TASKS) - Container-less Layout */}
           {activeViewTab === "snapshot" && (
-            <div className="py-2">
-              <div className="divide-y divide-slate-100 dark:divide-zinc-800/60 border-t border-b border-slate-200/80 dark:border-zinc-800/80">
+            <div className="pt-2 pb-0">
+              <div className="divide-y divide-slate-100 dark:divide-zinc-800/60">
                 {filteredTasks.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-400 dark:text-zinc-500">
                     {taskSearch ? "No tasks matching your search query." : "No tasks in this snapshot."}

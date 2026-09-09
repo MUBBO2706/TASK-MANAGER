@@ -797,6 +797,8 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
                               glyphMargin: false, // Hides glyph column
                               lineDecorationsWidth: 6, // Clean spacing between line numbers and code
                               lineNumbersMinChars: 3, // Proper width for line numbers up to 3 digits
+                              diffAlgorithm: 'advanced',
+                              ignoreTrimWhitespace: false,
                             }}
                             onMount={(editor) => {
                               const original = editor.getOriginalEditor();
