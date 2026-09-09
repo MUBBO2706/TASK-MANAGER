@@ -186,7 +186,7 @@ const TaskItem = React.memo(({
       {/* Bottom Row: Content / Description */}
       <div className="w-full">
         <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
-          {task.description || (task.type === "edge_function" ? "Edge Function" : task.sql.trim() || "Empty query")}
+          {task.description || (task.type === "edge_function" ? "Edge Function" : (task.isContentFetched ? (task.sql?.trim() || "Empty query") : "Hover to preview query..."))}
         </p>
       </div>
     </div>
@@ -1211,40 +1211,53 @@ export default function App() {
             }
 
             let initialTasksData: any[] = [];
-            let { data: tData, error: tError } = await supabase
-              .from('tasks')
-              .select('*')
-              .in('project_id', projectIdsToFetch)
-              .order('order_index', { ascending: true })
-              .order('created_at', { ascending: true });
-
-            if (tError && (tError.code === 'PGRST204' || JSON.stringify(tError).includes('order_index'))) {
-              const fallback = await supabase
+            let fallbackUsed = false;
+            try {
+              const tResp = await fetch(`/api/project-tasks-light?projectIds=${projectIdsToFetch.join(',')}&api_key=${API_KEY_FALLBACK}`);
+              if (tResp.ok) {
+                initialTasksData = await tResp.json();
+              } else {
+                throw new Error("Light tasks fetch returned non-200");
+              }
+            } catch (err) {
+              console.warn("Falling back to direct task fetch on initial load", err);
+              fallbackUsed = true;
+              let { data: tData, error: tError } = await supabase
                 .from('tasks')
                 .select('*')
                 .in('project_id', projectIdsToFetch)
+                .order('order_index', { ascending: true })
                 .order('created_at', { ascending: true });
-              initialTasksData = fallback.data || [];
-            } else {
-              initialTasksData = tData || [];
+
+              if (tError && (tError.code === 'PGRST204' || JSON.stringify(tError).includes('order_index'))) {
+                const fallback = await supabase
+                  .from('tasks')
+                  .select('*')
+                  .in('project_id', projectIdsToFetch)
+                  .order('created_at', { ascending: true });
+                initialTasksData = fallback.data || [];
+              } else {
+                initialTasksData = tData || [];
+              }
             }
 
             const mappedTasks: SqlTask[] = initialTasksData.map(t => ({
               id: t.id,
               title: t.title,
               type: t.type,
-              sql: t.sql,
-              functionCode: t.function_code,
-              description: t.description,
-              edgeFiles: t.edge_files,
-              edgeSecrets: t.edge_secrets,
-              status: t.status,
-              folderId: t.folder_id,
-              projectId: t.project_id,
-              productionTaskId: t.production_task_id,
-              createdAt: t.created_at,
-              updatedAt: t.updated_at,
-              orderIndex: t.order_index
+              sql: t.sql || '',
+              functionCode: t.functionCode || t.function_code || '',
+              description: t.description || '',
+              edgeFiles: t.edgeFiles || t.edge_files || [],
+              edgeSecrets: t.edgeSecrets || t.edge_secrets || [],
+              status: t.status || 'pending',
+              folderId: t.folderId || t.folder_id,
+              projectId: t.projectId || t.project_id,
+              productionTaskId: t.productionTaskId || t.production_task_id,
+              createdAt: t.createdAt || t.created_at,
+              updatedAt: t.updatedAt || t.updated_at,
+              orderIndex: t.orderIndex ?? t.order_index,
+              isContentFetched: fallbackUsed ? true : (t.isContentFetched ?? false)
             })).sort((a, b) => {
               if (a.orderIndex !== undefined && a.orderIndex !== null && b.orderIndex !== undefined && b.orderIndex !== null) {
                 return a.orderIndex - b.orderIndex;
@@ -1289,8 +1302,14 @@ export default function App() {
                   const mappedTask: Partial<SqlTask> = { id: t.id };
                   if (t.title !== undefined) mappedTask.title = t.title;
                   if (t.type !== undefined) mappedTask.type = t.type;
-                  if (t.sql !== undefined) mappedTask.sql = t.sql;
-                  if (t.function_code !== undefined) mappedTask.functionCode = t.function_code;
+                  if (t.sql !== undefined) {
+                     mappedTask.sql = t.sql;
+                     mappedTask.isContentFetched = true;
+                  }
+                  if (t.function_code !== undefined) {
+                     mappedTask.functionCode = t.function_code;
+                     mappedTask.isContentFetched = true;
+                  }
                   if (t.description !== undefined) mappedTask.description = t.description;
                   if (t.edge_files !== undefined) mappedTask.edgeFiles = t.edge_files;
                   if (t.edge_secrets !== undefined) mappedTask.edgeSecrets = t.edge_secrets;
@@ -1438,76 +1457,62 @@ export default function App() {
     setIsProjectTasksLoading(true);
 
     const loadTasksForSelectedProject = async () => {
-      const CHUNK_SIZE = 12;
-      let offset = 0;
-      let hasMore = true;
-
       try {
-        while (hasMore && isSubscribed) {
-          let chunkData: any[] = [];
-          let { data, error } = await supabase
+        let lightweightTasks: any[] = [];
+        let fallbackUsed = false;
+        try {
+          const tResp = await fetch(`/api/project-tasks-light?projectIds=${idsNeedingFetch.join(',')}&api_key=${API_KEY_FALLBACK}`);
+          if (tResp.ok) {
+            lightweightTasks = await tResp.json();
+          } else {
+            throw new Error("Failed lightweight tasks fetch");
+          }
+        } catch (err) {
+          console.warn("Falling back to direct task fetch on project switch", err);
+          fallbackUsed = true;
+          const { data: tData } = await supabase
             .from('tasks')
             .select('*')
             .in('project_id', idsNeedingFetch)
             .order('order_index', { ascending: true })
-            .order('created_at', { ascending: true })
-            .range(offset, offset + CHUNK_SIZE - 1);
+            .order('created_at', { ascending: true });
+          lightweightTasks = tData || [];
+        }
 
-          if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
-            const fallback = await supabase
-              .from('tasks')
-              .select('*')
-              .in('project_id', idsNeedingFetch)
-              .order('created_at', { ascending: true })
-              .range(offset, offset + CHUNK_SIZE - 1);
-            chunkData = fallback.data || [];
-          } else {
-            chunkData = data || [];
-          }
+        if (!isSubscribed) return;
 
-          if (!isSubscribed) break;
+        if (lightweightTasks.length > 0) {
+          const mappedTasks: SqlTask[] = lightweightTasks.map(t => ({
+            id: t.id,
+            title: t.title,
+            type: t.type,
+            sql: t.sql || '',
+            functionCode: t.functionCode || t.function_code || '',
+            description: t.description || '',
+            edgeFiles: t.edgeFiles || t.edge_files || [],
+            edgeSecrets: t.edgeSecrets || t.edge_secrets || [],
+            status: t.status || 'pending',
+            folderId: t.folderId || t.folder_id,
+            projectId: t.projectId || t.project_id,
+            productionTaskId: t.productionTaskId || t.production_task_id,
+            createdAt: t.createdAt || t.created_at,
+            updatedAt: t.updatedAt || t.updated_at,
+            orderIndex: t.orderIndex ?? t.order_index,
+            isContentFetched: fallbackUsed ? true : (t.isContentFetched ?? false)
+          }));
 
-          if (chunkData.length > 0) {
-            const mappedTasks: SqlTask[] = chunkData.map(t => ({
-              id: t.id,
-              title: t.title,
-              type: t.type,
-              sql: t.sql,
-              functionCode: t.function_code,
-              description: t.description,
-              edgeFiles: t.edge_files,
-              edgeSecrets: t.edge_secrets,
-              status: t.status,
-              folderId: t.folder_id,
-              projectId: t.project_id,
-              productionTaskId: t.production_task_id,
-              createdAt: t.created_at,
-              updatedAt: t.updated_at,
-              orderIndex: t.order_index
-            }));
-
-            setTasks(prev => {
-              const taskMap = new Map<string, SqlTask>(prev.map(t => [t.id, t]));
-              mappedTasks.forEach(t => taskMap.set(t.id, t));
-              return Array.from(taskMap.values()).sort((a, b) => {
-                if (a.orderIndex !== undefined && a.orderIndex !== null && b.orderIndex !== undefined && b.orderIndex !== null) {
-                  return a.orderIndex - b.orderIndex;
-                }
-                if (a.orderIndex !== undefined && a.orderIndex !== null) return -1;
-                if (b.orderIndex !== undefined && b.orderIndex !== null) return 1;
-                return b.createdAt - a.createdAt;
-              });
+          setTasks(prev => {
+            const taskMap = new Map<string, SqlTask>(prev.map(t => [t.id, t]));
+            mappedTasks.forEach(t => taskMap.set(t.id, t));
+            return Array.from(taskMap.values()).sort((a, b) => {
+              if (a.orderIndex !== undefined && a.orderIndex !== null && b.orderIndex !== undefined && b.orderIndex !== null) {
+                return a.orderIndex - b.orderIndex;
+              }
+              if (a.orderIndex !== undefined && a.orderIndex !== null) return -1;
+              if (b.orderIndex !== undefined && b.orderIndex !== null) return 1;
+              return b.createdAt - a.createdAt;
             });
-
-            // Turn off skeleton loader as soon as the first chunk arrives so user can interact immediately
-            setIsProjectTasksLoading(false);
-          }
-
-          if (chunkData.length < CHUNK_SIZE) {
-            hasMore = false;
-          } else {
-            offset += CHUNK_SIZE;
-          }
+          });
         }
 
         if (isSubscribed) {
@@ -1519,7 +1524,7 @@ export default function App() {
           setIsProjectTasksLoading(false);
         }
       } catch (err) {
-        console.warn("Failed to load on-demand project tasks", err);
+        console.warn("Failed to load project tasks", err);
         if (isSubscribed) {
           setIsProjectTasksLoading(false);
         }

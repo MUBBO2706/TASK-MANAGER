@@ -43,6 +43,55 @@ const checkApiKey = (req: express.Request, res: express.Response, next: express.
   next();
 };
 
+// Helper to fetch lightweight tasks (metadata only) from Supabase to prevent loading heavy sql / function code columns
+async function fetchLightweightTasksFromDB(projectId?: string) {
+  try {
+    const columns = 'id, title, type, description, status, folder_id, project_id, production_task_id, created_at, updated_at, order_index';
+    let query = supabase.from('tasks').select(columns);
+    if (projectId) {
+      query = query.eq('project_id', projectId);
+    }
+    
+    let { data, error } = await query
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
+      let fallbackQuery = supabase.from('tasks').select(columns);
+      if (projectId) {
+        fallbackQuery = fallbackQuery.eq('project_id', projectId);
+      }
+      const fallback = await fallbackQuery.order('created_at', { ascending: true });
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) throw error;
+    
+    return data.map(t => ({
+      id: t.id,
+      title: t.title,
+      type: t.type,
+      sql: '', // Omitted for lightweight initial load
+      functionCode: '', // Omitted for lightweight initial load
+      description: t.description,
+      edgeFiles: [],
+      edgeSecrets: [],
+      status: t.status,
+      folderId: t.folder_id,
+      projectId: t.project_id,
+      productionTaskId: t.production_task_id,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+      orderIndex: t.order_index,
+      isContentFetched: false
+    })) || [];
+  } catch (error) {
+    console.error("Error reading lightweight tasks from Supabase:", error);
+    return [];
+  }
+}
+
 // Helper to fetch tasks from Supabase
 async function fetchTasksFromDB(projectId?: string) {
   try {
@@ -399,6 +448,32 @@ app.post("/api/ai/reject-staging", checkApiKey, async (req, res) => {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to reject staging:", errDetails);
     res.status(500).json({ error: "Failed to reject staging", details: errDetails });
+  }
+});
+
+app.get("/api/project-tasks-light", checkApiKey, async (req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  
+  const projectIdsStr = req.query.projectIds as string;
+  if (!projectIdsStr) {
+    return res.status(400).json({ error: "projectIds is required" });
+  }
+
+  const projectIds = projectIdsStr.split(',');
+  const allTasks: any[] = [];
+
+  try {
+    for (const pid of projectIds) {
+      const tasks = await fetchLightweightTasksFromDB(pid);
+      allTasks.push(...tasks);
+    }
+
+    res.json(allTasks);
+  } catch (err) {
+    console.error("Error fetching lightweight tasks:", err);
+    res.status(500).json({ error: "Failed to fetch lightweight tasks" });
   }
 });
 
