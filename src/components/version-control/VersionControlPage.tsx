@@ -30,6 +30,7 @@ import { VersionDetailView, getActionBadgeConfig } from "./VersionDetailView";
 import VersionControlSkeleton, { VersionTimelineSkeleton } from "./VersionControlSkeleton";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
+import { groupBackupsSequentially, ConsolidatedBackupGroup } from "./consolidation";
 
 const CUSTOM_COL_RESIZE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M8 9L5 12L8 15V9Z' fill='%230f172a'/%3E%3Cpath d='M16 9L19 12L16 15V9Z' fill='%230f172a'/%3E%3Cline x1='12' y1='6' x2='12' y2='18' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, col-resize`;
 
@@ -288,6 +289,19 @@ export function VersionControlPage({
     });
   }, [versionBackups, filterCategory, searchQuery]);
 
+
+  const groupedBackups = useMemo(() => {
+    return groupBackupsSequentially(filteredBackups);
+  }, [filteredBackups]);
+
+  const selectedGroup = useMemo(() => {
+    return groupedBackups.find((g) => g.items.some((b) => b.id === selectedVersionId)) || null;
+  }, [groupedBackups, selectedVersionId]);
+
+  const selectedVersionGroup = useMemo(() => {
+    return selectedGroup ? selectedGroup.items : null;
+  }, [selectedGroup]);
+
   const selectedVersion = useMemo(() => {
     return versionBackups.find((b) => b.id === selectedVersionId) || null;
   }, [versionBackups, selectedVersionId]);
@@ -303,14 +317,15 @@ export function VersionControlPage({
     }, { replace: true });
   };
 
-  const handleToggleSelectVersion = (id: string, e?: React.MouseEvent) => {
+  const handleToggleSelectVersion = (groupItems: VersionBackup[], e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setSelectedVersionIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      const allSelected = groupItems.every(b => next.has(b.id));
+      if (allSelected) {
+        groupItems.forEach(b => next.delete(b.id));
       } else {
-        next.add(id);
+        groupItems.forEach(b => next.add(b.id));
       }
       return next;
     });
@@ -427,7 +442,10 @@ export function VersionControlPage({
 
           {/* Right: Snapshots Badge (opposite right side) */}
           <span className="text-[10.5px] font-bold px-2.5 py-0.5 rounded-full text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 shrink-0">
-            {versionBackups.length} {versionBackups.length === 1 ? "Snapshot" : "Snapshots"}
+            {groupedBackups.length} {groupedBackups.length === 1 ? "Snapshot" : "Snapshots"}
+            {versionBackups.length > groupedBackups.length && (
+              <span className="opacity-75 font-normal ml-1">({versionBackups.length} revisions)</span>
+            )}
           </span>
         </header>
       )}
@@ -614,21 +632,21 @@ export function VersionControlPage({
                 </p>
               </div>
             ) : (
-              filteredBackups.map((backup) => {
+              groupedBackups.map((group) => {
+                const backup = group.latestBackup; // representative latest backup for the group
                 const badge = getActionBadgeConfig(backup.action);
-                const isSelected = selectedVersionId === backup.id;
-                const isChecked = selectedVersionIds.has(backup.id);
-                const isProjectDeleted =
-                  backup.prodProjectId && !existingProjectIds.has(backup.prodProjectId);
+                const isSelected = selectedVersionId && group.items.some(b => b.id === selectedVersionId);
+                const isChecked = group.items.some(b => selectedVersionIds.has(b.id)); // If any checked, show checked for group
+                const isProjectDeleted = backup.prodProjectId && !existingProjectIds.has(backup.prodProjectId);
 
                 return (
                   <div
-                    key={backup.id}
+                    key={group.groupKey + "-" + backup.id}
                     onClick={(e) => {
                       if (isSelectionMode) {
-                        handleToggleSelectVersion(backup.id, e);
+                        handleToggleSelectVersion(group.items, e);
                       } else {
-                        handleSelectVersion(backup);
+                        handleSelectVersion(group.latestBackup);
                       }
                     }}
                     className={cn(
@@ -646,7 +664,7 @@ export function VersionControlPage({
                       {/* Selection Checkbox */}
                       {isSelectionMode && (
                         <div
-                          onClick={(e) => handleToggleSelectVersion(backup.id, e)}
+                          onClick={(e) => handleToggleSelectVersion(group.items, e)}
                           className="shrink-0 text-slate-400 hover:text-blue-600 cursor-pointer"
                         >
                           {isChecked ? (
@@ -672,6 +690,13 @@ export function VersionControlPage({
                               <span>{badge.label}</span>
                             </span>
 
+                            {group.count > 1 && (
+                              <span className="text-[8.5px] sm:text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-300 bg-blue-500/15 border border-blue-500/25 shrink-0 flex items-center gap-1 whitespace-nowrap">
+                                <Layers size={10} className="stroke-[2.5]" />
+                                <span>{group.count} edits</span>
+                              </span>
+                            )}
+
                             {isProjectDeleted && (
                               <span className="text-[8px] sm:text-[8.5px] font-semibold px-1 py-0.5 rounded text-zinc-500 bg-zinc-500/15 border border-zinc-500/20 shrink-0 whitespace-nowrap">
                                 <span className="hidden sm:inline">Project Deleted</span>
@@ -685,7 +710,7 @@ export function VersionControlPage({
                               </span>
                             )}
 
-                            <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-zinc-500 font-mono shrink-0 whitespace-nowrap ml-2 sm:ml-2.5">
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-zinc-500 font-mono shrink-0 whitespace-nowrap ml-1.5 sm:ml-2">
                               {new Date(backup.timestamp).toLocaleString(undefined, {
                                 month: "short",
                                 day: "numeric",
@@ -716,7 +741,7 @@ export function VersionControlPage({
                           )}
                         </div>
 
-                        {/* Description - Strictly single line with ellipsis */}
+                        {/* Title - Strictly single line with ellipsis */}
                         <p
                           className={cn(
                             "text-xs mt-1.5 leading-snug truncate whitespace-nowrap overflow-hidden text-ellipsis",
@@ -724,10 +749,19 @@ export function VersionControlPage({
                               ? "font-semibold text-slate-900 dark:text-white"
                               : "text-slate-700 dark:text-zinc-300 font-medium"
                           )}
-                          title={backup.description || "Database snapshot recorded"}
+                          title={group.displayTitle}
                         >
-                          {backup.description || "Database snapshot recorded"}
+                          {group.displayTitle}
                         </p>
+
+                        {group.count > 1 && (
+                          <p
+                            className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5 leading-tight truncate whitespace-nowrap overflow-hidden text-ellipsis font-normal"
+                            title={group.displaySubtitle}
+                          >
+                            {group.displaySubtitle}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -763,7 +797,8 @@ export function VersionControlPage({
           )}
         >
           <VersionDetailView
-            version={selectedVersion}
+            versionGroup={selectedVersionGroup}
+            currentGroup={selectedGroup}
             currentProjects={currentProjects}
             onBack={() => {
               if (isDesktop) {
