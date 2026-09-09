@@ -3304,13 +3304,23 @@ export default function App() {
           }}
         >
           {isCurrentProjectLoading ? (
-            <div className="divide-y divide-slate-100 dark:divide-zinc-900/40">
-              {Array.from({
-                length: Math.max(5, Math.min(10, (activeTab === "sql" ? activeMetrics?.sql : activeMetrics?.funcs) || activeMetrics?.total || 7))
-              }).map((_, idx) => (
-                <TaskItemSkeleton key={idx} index={idx} />
-              ))}
-            </div>
+            (() => {
+              const tabCount = activeTab === "sql" ? (activeMetrics?.sql ?? 0) : (activeMetrics?.funcs ?? 0);
+              if (tabCount > 0) {
+                return (
+                  <div className="divide-y divide-slate-100 dark:divide-zinc-900/40">
+                    {Array.from({ length: tabCount }).map((_, idx) => (
+                      <TaskItemSkeleton key={idx} index={idx} />
+                    ))}
+                  </div>
+                );
+              }
+              return (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500 gap-2">
+                  <Loader size={24} className="animate-spin text-slate-400 dark:text-zinc-400" />
+                </div>
+              );
+            })()
           ) : filteredTasks.length === 0 ? (
             <div className="text-center p-8 text-slate-400 dark:text-slate-600">
               <Database size={32} className="mx-auto mb-3 opacity-20" />
