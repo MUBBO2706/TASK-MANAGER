@@ -35,6 +35,7 @@ import {
 import { cn } from "../../lib/utils";
 import { Project, VersionBackup, SqlTask } from "../../types";
 import { SideBySideDiff } from "./SideBySideDiff";
+import { WordDiffView } from "./WordDiffView";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
 import { ConsolidatedBackupGroup } from "./consolidation";
@@ -389,9 +390,9 @@ export function VersionDetailView({
               )}
 
               {versionGroup && versionGroup.length > 1 && (
-                <span className="text-[8.5px] sm:text-[9.5px] font-bold tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md text-blue-700 dark:text-blue-300 bg-blue-500/15 border border-blue-500/30 shrink-0 flex items-center gap-1 whitespace-nowrap">
-                  <Layers size={10} className="stroke-[2.5]" />
-                  <span>Consolidated ({versionGroup.length})</span>
+                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <Layers size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" />
+                  <span>{versionGroup.length} revisions</span>
                 </span>
               )}
 
@@ -633,21 +634,20 @@ export function VersionDetailView({
 
                                         {/* Field Diffs */}
                                         {mod.titleChanged && (
-                                          <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Title:</span>
-                                            <span className="text-red-600 dark:text-red-400 line-through">{mod.oldTask.title}</span>
-                                            <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mod.task.title}</span>
-                                          </div>
+                                          <WordDiffView
+                                            label="Title"
+                                            oldText={mod.oldTask.title || ""}
+                                            newText={mod.task.title || ""}
+                                          />
                                         )}
 
                                         {mod.descriptionChanged && (
-                                          <div className="flex items-start gap-1.5 flex-wrap text-xs">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Desc:</span>
-                                            <span className="text-red-600 dark:text-red-400 line-through">{mod.oldTask.description || "(Empty)"}</span>
-                                            <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mod.task.description || "(Empty)"}</span>
-                                          </div>
+                                          <WordDiffView
+                                            label="Description"
+                                            oldText={mod.oldTask.description || ""}
+                                            newText={mod.task.description || ""}
+                                            isLongText={true}
+                                          />
                                         )}
 
                                         {mod.statusChanged && (
@@ -793,13 +793,13 @@ export function VersionDetailView({
         {/* Primary View Switcher: Changes Diff (Old vs New) vs Full Snapshot - Compact Tab Bar */}
         <div className="pt-0.5 sm:pt-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 dark:border-zinc-800/80 pb-2">
-            {/* Compact 2-Tab Segmented Control */}
-            <div className="grid grid-cols-2 sm:flex items-center bg-slate-100/80 dark:bg-zinc-900 p-0.5 rounded-lg text-xs font-semibold w-full sm:w-auto">
+            {/* Compact 2-Tab Segmented Control - Hugs Content Width */}
+            <div className="inline-flex items-center bg-slate-100/80 dark:bg-zinc-900 p-0.5 rounded-lg text-xs font-semibold w-fit shrink-0">
               <button
                 type="button"
                 onClick={() => setActiveViewTab("diff")}
                 className={cn(
-                  "px-2.5 py-1 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap text-xs min-h-[30px]",
+                  "px-2 sm:px-2.5 py-1 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap text-xs min-h-[28px] sm:min-h-[30px] shrink-0",
                   activeViewTab === "diff"
                     ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-2xs font-bold"
                     : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 font-medium"
@@ -818,7 +818,7 @@ export function VersionDetailView({
                 type="button"
                 onClick={() => setActiveViewTab("snapshot")}
                 className={cn(
-                  "px-2.5 py-1 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap text-xs min-h-[30px]",
+                  "px-2 sm:px-2.5 py-1 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap text-xs min-h-[28px] sm:min-h-[30px] shrink-0",
                   activeViewTab === "snapshot"
                     ? "bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-2xs font-bold"
                     : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 font-medium"
@@ -940,14 +940,11 @@ export function VersionDetailView({
                                   {/* Containerless responsive layout for metadata changes (old vs new) */}
                                   <div className="text-xs space-y-2 py-1">
                                     {titleChanged && (
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                        <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider sm:w-24">Title:</span>
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="text-red-600 dark:text-red-400 line-through truncate">{oldTask.title || "Untitled"}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate">{task.title || "Untitled"}</span>
-                                        </div>
-                                      </div>
+                                      <WordDiffView
+                                        label="Title"
+                                        oldText={oldTask.title || "Untitled"}
+                                        newText={task.title || "Untitled"}
+                                      />
                                     )}
                                     {statusChanged && (
                                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -960,14 +957,12 @@ export function VersionDetailView({
                                       </div>
                                     )}
                                     {descriptionChanged && (
-                                      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
-                                        <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider sm:w-24 shrink-0 sm:pt-0.5">Description:</span>
-                                        <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
-                                          <span className="text-red-600 dark:text-red-400 line-through truncate max-w-full block">{oldTask.description || "(Empty)"}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate max-w-full block">{task.description || "(Empty)"}</span>
-                                        </div>
-                                      </div>
+                                      <WordDiffView
+                                        label="Description"
+                                        oldText={oldTask.description || ""}
+                                        newText={task.description || ""}
+                                        isLongText={true}
+                                      />
                                     )}
                                     {orderChanged && (
                                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -1276,13 +1271,13 @@ export function VersionDetailView({
       </div>
 
       {/* Mobile Only Bottom Footer for Undo & Redo Controls (Desktop removed) */}
-      <div className="md:hidden sticky bottom-0 left-0 right-0 z-20 px-3 py-2 border-t border-slate-200/80 dark:border-zinc-800/80 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md flex items-center justify-between gap-2 shrink-0">
+      <div className="md:hidden sticky bottom-0 left-0 right-0 z-20 px-3 py-2 border-t border-slate-200/80 dark:border-zinc-800/80 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md flex items-center justify-end gap-2 shrink-0">
         <button
           type="button"
           onClick={() => setConfirmRestore("undo")}
           disabled={version.isUndone || isRestoring}
           className={cn(
-            "flex-1 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
+            "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
             version.isUndone
               ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
               : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white"
@@ -1299,7 +1294,7 @@ export function VersionDetailView({
           onClick={() => setConfirmRestore("redo")}
           disabled={!version.isUndone || isRestoring}
           className={cn(
-            "flex-1 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
+            "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
             !version.isUndone
               ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
               : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white"
@@ -1341,10 +1336,10 @@ export function VersionDetailView({
               </p>
             </div>
 
-            {/* Consolidated Sessions: Version Revert Target Selector */}
+            {/* Consolidated Sessions: Version Revert Target Selector - Containerless */}
             {versionGroup && versionGroup.length > 1 ? (
-              <div className="px-5 py-2.5 overflow-y-auto max-h-56 space-y-2 border-y border-slate-100 dark:border-zinc-800/60 bg-slate-50/50 dark:bg-zinc-900/40">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 block mb-1">
+              <div className="px-5 py-2 overflow-y-auto max-h-56 divide-y divide-slate-100 dark:divide-zinc-800/60 border-y border-slate-200/70 dark:border-zinc-800/70">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 block py-1">
                   Choose Target Reversion State:
                 </span>
                 {versionGroup.map((item, idx) => {
@@ -1365,14 +1360,14 @@ export function VersionDetailView({
                       key={item.id}
                       onClick={() => setTargetVersionId(item.id)}
                       className={cn(
-                        "p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex items-start justify-between gap-2",
+                        "py-2.5 px-1 text-xs cursor-pointer transition-colors flex items-start justify-between gap-2",
                         isSelected
-                          ? "bg-blue-50/80 dark:bg-blue-950/30 border-blue-500/60 shadow-2xs ring-1 ring-blue-500/40"
-                          : "bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
+                          ? "bg-blue-50/50 dark:bg-blue-950/20"
+                          : "hover:bg-slate-50/60 dark:hover:bg-zinc-900/40"
                       )}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-0.5">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                           <span className={cn(
                             "font-bold font-mono text-[11px]",
                             isSelected ? "text-blue-700 dark:text-blue-300" : "text-slate-700 dark:text-zinc-300"
@@ -1393,7 +1388,10 @@ export function VersionDetailView({
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-600 dark:text-zinc-300 truncate">
+                        <p className={cn(
+                          "text-[11px] leading-relaxed break-words",
+                          isSelected ? "text-slate-900 dark:text-zinc-100 font-medium" : "text-slate-600 dark:text-zinc-400"
+                        )}>
                           {item.description || "Revision state recorded"}
                         </p>
                       </div>
@@ -1413,12 +1411,12 @@ export function VersionDetailView({
                 })}
               </div>
             ) : (
-              /* Single Snapshot Info Box */
-              <div className="px-5 py-2.5 bg-slate-50 dark:bg-zinc-900/60 border-y border-slate-100 dark:border-zinc-800/60 text-xs">
-                <p className="font-semibold text-slate-800 dark:text-zinc-200 italic">
+              /* Single Snapshot Info Box - Containerless */
+              <div className="px-5 py-3 border-y border-slate-200/70 dark:border-zinc-800/70 text-xs">
+                <p className="font-semibold text-slate-800 dark:text-zinc-200 italic leading-relaxed">
                   &ldquo;{version.description || "Baseline state modification"}&rdquo;
                 </p>
-                <span className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5 block font-mono">
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1 block font-mono">
                   {new Date(version.timestamp).toLocaleString()}
                 </span>
               </div>
