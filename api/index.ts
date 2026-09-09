@@ -108,6 +108,72 @@ app.get("/api/projects", checkApiKey, async (req, res) => {
   }
 });
 
+app.get("/api/projects/summary", checkApiKey, async (req, res) => {
+  try {
+    // 1. Try fetching from dynamic project_summaries view
+    const { data: viewData, error: viewError } = await supabase
+      .from('project_summaries')
+      .select('*')
+      .order('project_created_at', { ascending: false });
+
+    if (!viewError && viewData) {
+      const formatted = viewData.map((row: any) => ({
+        id: row.project_id,
+        name: row.project_name,
+        createdAt: Number(row.project_created_at),
+        totalTasks: Number(row.total_tasks || 0),
+        sqlCount: Number(row.sql_count || 0),
+        functionCount: Number(row.function_count || 0),
+        ranCount: Number(row.ran_count || 0)
+      }));
+      return res.json(formatted);
+    }
+
+    // 2. Resilient fallback: Query projects + lightweight tasks fields if view not created yet
+    const [projectsRes, tasksRes] = await Promise.all([
+      supabase.from('projects').select('id, name, created_at').order('created_at', { ascending: false }),
+      supabase.from('tasks').select('id, type, status, project_id')
+    ]);
+
+    if (projectsRes.error) throw projectsRes.error;
+
+    const projs = projectsRes.data || [];
+    const tasks = tasksRes.data || [];
+
+    const summaryMap: Record<string, { totalTasks: number; sqlCount: number; functionCount: number; ranCount: number }> = {};
+    projs.forEach((p: any) => {
+      summaryMap[p.id] = { totalTasks: 0, sqlCount: 0, functionCount: 0, ranCount: 0 };
+    });
+
+    tasks.forEach((t: any) => {
+      if (!t.project_id || !summaryMap[t.project_id]) return;
+      const s = summaryMap[t.project_id];
+      s.totalTasks += 1;
+      if (t.type === 'edge_function') {
+        s.functionCount += 1;
+      } else {
+        s.sqlCount += 1;
+      }
+      if (t.status === 'ran') {
+        s.ranCount += 1;
+      }
+    });
+
+    const result = projs.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      createdAt: Number(p.created_at),
+      ...(summaryMap[p.id] || { totalTasks: 0, sqlCount: 0, functionCount: 0, ranCount: 0 })
+    }));
+
+    res.json(result);
+  } catch (err) {
+    const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Failed to fetch project summary:", errDetails);
+    res.status(500).json({ error: "Failed to fetch project summary", details: errDetails });
+  }
+});
+
 app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
   try {
     const { projectId } = req.body;

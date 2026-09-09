@@ -102,5 +102,22 @@ ALTER TABLE tasks ADD CONSTRAINT fk_tasks_folder FOREIGN KEY (folder_id) REFEREN
 ALTER TABLE folders DROP CONSTRAINT IF EXISTS fk_folders_project;
 ALTER TABLE folders ADD CONSTRAINT fk_folders_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
 
+-- 7. Optimized Index for project-level task filtering
+CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+
+-- 8. Dynamic Project Summary View for fast dropdown metadata and counts
+CREATE OR REPLACE VIEW project_summaries AS
+SELECT 
+  p.id AS project_id,
+  p.name AS project_name,
+  p.created_at AS project_created_at,
+  COUNT(t.id) AS total_tasks,
+  COUNT(CASE WHEN t.type = 'sql' OR t.type IS NULL OR t.type = '' THEN 1 END) AS sql_count,
+  COUNT(CASE WHEN t.type = 'edge_function' THEN 1 END) AS function_count,
+  COUNT(CASE WHEN t.status = 'ran' THEN 1 END) AS ran_count
+FROM projects p
+LEFT JOIN tasks t ON p.id = t.project_id
+GROUP BY p.id, p.name, p.created_at;
+
 
 

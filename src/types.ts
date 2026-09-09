@@ -36,6 +36,16 @@ export interface Project {
   createdAt: number;
 }
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  createdAt: number;
+  totalTasks: number;
+  sqlCount: number;
+  functionCount: number;
+  ranCount: number;
+}
+
 export interface Folder {
   id: string;
   name: string;

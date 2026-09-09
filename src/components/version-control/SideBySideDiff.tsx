@@ -98,8 +98,8 @@ export const SideBySideDiff = memo(function SideBySideDiff({
           addedColor: "#15803d",
           removedBackground: "#fff1f2",
           removedColor: "#be123c",
-          wordAddedBackground: "#bbf7d0",
-          wordRemovedBackground: "#fecdd3",
+          wordAddedBackground: "#86efac",
+          wordRemovedBackground: "#fca5a5",
           addedGutterBackground: "#dcfce7",
           removedGutterBackground: "#ffe4e6",
           gutterBackground: "#f8fafc",
@@ -117,8 +117,8 @@ export const SideBySideDiff = memo(function SideBySideDiff({
           addedColor: "#6ee7b7",
           removedBackground: "rgba(244, 63, 94, 0.12)",
           removedColor: "#fda4af",
-          wordAddedBackground: "rgba(16, 185, 129, 0.35)",
-          wordRemovedBackground: "rgba(244, 63, 94, 0.35)",
+          wordAddedBackground: "rgba(16, 185, 129, 0.45)",
+          wordRemovedBackground: "rgba(244, 63, 94, 0.45)",
           addedGutterBackground: "rgba(16, 185, 129, 0.2)",
           removedGutterBackground: "rgba(244, 63, 94, 0.2)",
           gutterBackground: "#111114",
@@ -179,16 +179,21 @@ export const SideBySideDiff = memo(function SideBySideDiff({
           "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       },
       wordDiff: {
-        padding: "0 1px",
+        padding: "0 2px",
         borderRadius: "2px",
+        display: "inline",
       },
       wordAdded: {
         padding: "0 2px",
         borderRadius: "2px",
+        display: "inline",
+        fontWeight: "600",
       },
       wordRemoved: {
         padding: "0 2px",
         borderRadius: "2px",
+        display: "inline",
+        fontWeight: "600",
       },
     }),
     []
@@ -299,7 +304,7 @@ export const SideBySideDiff = memo(function SideBySideDiff({
           newValue={newValue || ""}
           splitView={splitView}
           useDarkTheme={darkActive}
-          compareMethod={DiffMethod.CHARS}
+          compareMethod={DiffMethod.WORDS_WITH_SPACE}
           styles={customStyles}
           hideLineNumbers={false}
           showDiffOnly={false}

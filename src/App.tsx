@@ -50,7 +50,7 @@ import { OfflineIndicator } from "./components/OfflineIndicator";
 import { VersionControlPage, VersionControlSkeleton } from "./components/version-control";
 import SkeletonLoader from "./components/SkeletonLoader";
 import DiffViewerSkeleton, { NoChangesDiffSkeleton } from "./components/DiffViewerSkeleton";
-import { SqlTask, Project, VersionBackup, VersionBackupData, VersionAction } from "./types";
+import { SqlTask, Project, ProjectSummary, VersionBackup, VersionBackupData, VersionAction } from "./types";
 import { cn } from "./lib/utils";
 import { supabase } from "./lib/supabase";
 
@@ -1114,37 +1114,65 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     
-    // 1. Initial fetch from Supabase
+    // 1. Initial fetch from Supabase (Lightweight project metadata summary + on-demand tasks for active project)
     const fetchInitialData = async () => {
       try {
-        const [tasksRes, projectsRes, backupsRes] = await Promise.all([
-          supabase
-            .from('tasks')
+        let projectsList: any[] = [];
+
+        // 1. Try fetching lightweight project summaries view first
+        try {
+          const { data: viewData, error: viewError } = await supabase
+            .from('project_summaries')
             .select('*')
-            .order('created_at', { ascending: false }),
-          supabase
+            .order('project_created_at', { ascending: false });
+
+          if (!viewError && viewData && viewData.length > 0) {
+            projectsList = viewData.map((row: any) => ({
+              id: row.project_id,
+              name: row.project_name,
+              createdAt: Number(row.project_created_at),
+              totalTasks: Number(row.total_tasks || 0),
+              sqlCount: Number(row.sql_count || 0),
+              functionCount: Number(row.function_count || 0),
+              ranCount: Number(row.ran_count || 0)
+            }));
+          }
+        } catch (_) {}
+
+        // Fallback to direct projects query if view is not available
+        if (projectsList.length === 0) {
+          const { data: pData, error: pError } = await supabase
             .from('projects')
             .select('*')
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('version_backups')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(50)
-        ]);
+            .order('created_at', { ascending: false });
 
-        if (tasksRes.error) throw tasksRes.error;
-        if (projectsRes.error && projectsRes.error.code !== '42P01') throw projectsRes.error; // 42P01 is table not found
-        if (backupsRes.error && backupsRes.error.code !== '42P01') console.warn("version_backups table not ready yet:", backupsRes.error);
-
-        if (isMounted) {
-          if (projectsRes.data) {
-           setProjects(projectsRes.data.map(p => ({
+          if (pError && pError.code !== '42P01') throw pError;
+          if (pData) {
+            projectsList = pData.map((p: any) => ({
               id: p.id,
               name: p.name,
-              createdAt: p.created_at
-            })));
+              createdAt: p.created_at,
+              totalTasks: 0,
+              sqlCount: 0,
+              functionCount: 0,
+              ranCount: 0
+            }));
           }
+        }
+
+        // Fetch version backups
+        const backupsRes = await supabase
+          .from('version_backups')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (backupsRes.error && backupsRes.error.code !== '42P01') {
+          console.warn("version_backups table not ready yet:", backupsRes.error);
+        }
+
+        if (isMounted) {
+          setProjects(projectsList);
 
           if (backupsRes.data && backupsRes.data.length > 0) {
             const mappedBackups: VersionBackup[] = backupsRes.data.map((b: any) => ({
@@ -1161,32 +1189,69 @@ export default function App() {
             setVersionBackups(mappedBackups);
           }
 
-          // Map back to camelCase
-          const mappedTasks: SqlTask[] = (tasksRes.data || []).map(t => ({
-            id: t.id,
-            title: t.title,
-            type: t.type,
-            sql: t.sql,
-            functionCode: t.function_code,
-            description: t.description,
-            edgeFiles: t.edge_files,
-            edgeSecrets: t.edge_secrets,
-            status: t.status,
-            folderId: t.folder_id,
-            projectId: t.project_id,
-            productionTaskId: t.production_task_id,
-            createdAt: t.created_at,
-            updatedAt: t.updated_at,
-            orderIndex: t.order_index
-          })).sort((a, b) => {
-            if (a.orderIndex !== undefined && a.orderIndex !== null && b.orderIndex !== undefined && b.orderIndex !== null) {
-              return a.orderIndex - b.orderIndex;
+          // Determine target project ID for lazy loading initial tasks
+          const targetProjectId = urlProjectId || (projectsList.some(p => p.id === lastVisitedProjectId) ? lastVisitedProjectId : projectsList[0]?.id);
+
+          if (targetProjectId) {
+            const targetProj = projectsList.find(p => p.id === targetProjectId);
+            const projectIdsToFetch = [targetProjectId];
+            if (targetProj?.name.endsWith(' [STAGING]')) {
+              const prodProjName = targetProj.name.replace(' [STAGING]', '');
+              const prodProj = projectsList.find(p => p.name === prodProjName);
+              if (prodProj) projectIdsToFetch.push(prodProj.id);
             }
-            if (a.orderIndex !== undefined && a.orderIndex !== null) return -1;
-            if (b.orderIndex !== undefined && b.orderIndex !== null) return 1;
-            return b.createdAt - a.createdAt;
-          });
-          setTasks(mappedTasks);
+
+            let initialTasksData: any[] = [];
+            let { data: tData, error: tError } = await supabase
+              .from('tasks')
+              .select('*')
+              .in('project_id', projectIdsToFetch)
+              .order('order_index', { ascending: true })
+              .order('created_at', { ascending: true });
+
+            if (tError && (tError.code === 'PGRST204' || JSON.stringify(tError).includes('order_index'))) {
+              const fallback = await supabase
+                .from('tasks')
+                .select('*')
+                .in('project_id', projectIdsToFetch)
+                .order('created_at', { ascending: true });
+              initialTasksData = fallback.data || [];
+            } else {
+              initialTasksData = tData || [];
+            }
+
+            const mappedTasks: SqlTask[] = initialTasksData.map(t => ({
+              id: t.id,
+              title: t.title,
+              type: t.type,
+              sql: t.sql,
+              functionCode: t.function_code,
+              description: t.description,
+              edgeFiles: t.edge_files,
+              edgeSecrets: t.edge_secrets,
+              status: t.status,
+              folderId: t.folder_id,
+              projectId: t.project_id,
+              productionTaskId: t.production_task_id,
+              createdAt: t.created_at,
+              updatedAt: t.updated_at,
+              orderIndex: t.order_index
+            })).sort((a, b) => {
+              if (a.orderIndex !== undefined && a.orderIndex !== null && b.orderIndex !== undefined && b.orderIndex !== null) {
+                return a.orderIndex - b.orderIndex;
+              }
+              if (a.orderIndex !== undefined && a.orderIndex !== null) return -1;
+              if (b.orderIndex !== undefined && b.orderIndex !== null) return 1;
+              return b.createdAt - a.createdAt;
+            });
+
+            setTasks(mappedTasks);
+
+            if (!urlProjectId && targetProjectId) {
+              navigate(`/p/${targetProjectId}`, { replace: true });
+            }
+          }
+
           setIsLoading(false);
         }
       } catch (err) {
@@ -1337,6 +1402,82 @@ export default function App() {
       if (currentChannel) supabase.removeChannel(currentChannel);
     };
   }, []);
+
+  // 2. On-demand fetch tasks when switching projects
+  useEffect(() => {
+    if (!selectedProjectId || isLoading) return;
+    let isSubscribed = true;
+
+    const activeProj = projectsRef.current.find(p => p.id === selectedProjectId);
+    const prodProj = activeProj?.name.endsWith(' [STAGING]')
+      ? projectsRef.current.find(p => p.name === activeProj.name.replace(' [STAGING]', ''))
+      : null;
+
+    const projectIdsToFetch = [selectedProjectId];
+    if (prodProj) projectIdsToFetch.push(prodProj.id);
+
+    const idsNeedingFetch = projectIdsToFetch.filter(
+      id => !tasksRef.current.some(t => t.projectId === id)
+    );
+
+    if (idsNeedingFetch.length === 0) return;
+
+    const loadTasksForSelectedProject = async () => {
+      try {
+        let tasksData: any[] = [];
+        let { data, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .in('project_id', idsNeedingFetch)
+          .order('order_index', { ascending: true })
+          .order('created_at', { ascending: true });
+
+        if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
+          const fallback = await supabase
+            .from('tasks')
+            .select('*')
+            .in('project_id', idsNeedingFetch)
+            .order('created_at', { ascending: true });
+          tasksData = fallback.data || [];
+        } else {
+          tasksData = data || [];
+        }
+
+        if (tasksData.length > 0 && isSubscribed) {
+          const mappedTasks: SqlTask[] = tasksData.map(t => ({
+            id: t.id,
+            title: t.title,
+            type: t.type,
+            sql: t.sql,
+            functionCode: t.function_code,
+            description: t.description,
+            edgeFiles: t.edge_files,
+            edgeSecrets: t.edge_secrets,
+            status: t.status,
+            folderId: t.folder_id,
+            projectId: t.project_id,
+            productionTaskId: t.production_task_id,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at,
+            orderIndex: t.order_index
+          }));
+
+          setTasks(prev => {
+            const existingFiltered = prev.filter(t => !idsNeedingFetch.includes(t.projectId || ''));
+            return [...existingFiltered, ...mappedTasks];
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to load on-demand project tasks", err);
+      }
+    };
+
+    loadTasksForSelectedProject();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [selectedProjectId, isLoading]);
 
   // History state for Undo/Redo
   const [sqlHistory, setSqlHistory] = useState<string[]>([]);
@@ -1969,42 +2110,63 @@ export default function App() {
     toast.success(`Exported project "${project.name}" (${projectTasks.length} tasks)`);
   };
 
-  const handleExportAllProjects = () => {
-    const sortedTasks = [...tasks].sort((a, b) => {
-      if (a.orderIndex !== undefined && b.orderIndex !== undefined) {
-        return a.orderIndex - b.orderIndex;
-      }
-      if (a.orderIndex !== undefined) return -1;
-      if (b.orderIndex !== undefined) return 1;
-      return b.createdAt - a.createdAt;
-    });
+  const handleExportAllProjects = async () => {
+    const toastId = "export-all";
+    toast.loading("Preparing full workspace export...", { id: toastId });
+    try {
+      const { data: allTasksData } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('order_index', { ascending: true })
+        .order('created_at', { ascending: true });
 
-    const structuredExport = {
-      version: "2.0",
-      type: "multi_project",
-      exportDate: new Date().toISOString(),
-      metadata: {
-        totalProjects: projects.length,
-        totalTasks: sortedTasks.length,
-        sqlTasksCount: sortedTasks.filter((t) => t.type === "sql" || !t.type).length,
-        edgeFunctionsCount: sortedTasks.filter((t) => t.type === "edge_function").length,
-      },
-      projects: projects,
-      tasks: sortedTasks,
-      _raw_tasks: sortedTasks,
-    };
+      const allTasks = (allTasksData || tasks).map(t => ({
+        id: t.id,
+        title: t.title,
+        type: t.type,
+        sql: t.sql,
+        functionCode: (t as any).function_code || t.functionCode,
+        description: t.description,
+        edgeFiles: (t as any).edge_files || t.edgeFiles,
+        edgeSecrets: (t as any).edge_secrets || t.edgeSecrets,
+        status: t.status,
+        folderId: (t as any).folder_id || t.folderId,
+        projectId: (t as any).project_id || t.projectId,
+        productionTaskId: (t as any).production_task_id || t.productionTaskId,
+        createdAt: (t as any).created_at || t.createdAt,
+        updatedAt: (t as any).updated_at || t.updatedAt,
+        orderIndex: (t as any).order_index || t.orderIndex
+      }));
 
-    const dataStr = JSON.stringify(structuredExport, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `workspace-backup-${new Date().toISOString().split("T")[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success(`Exported workspace backup (${projects.length} projects)`);
+      const structuredExport = {
+        version: "2.0",
+        type: "multi_project",
+        exportDate: new Date().toISOString(),
+        metadata: {
+          totalProjects: projects.length,
+          totalTasks: allTasks.length,
+          sqlTasksCount: allTasks.filter((t) => t.type === "sql" || !t.type).length,
+          edgeFunctionsCount: allTasks.filter((t) => t.type === "edge_function").length,
+        },
+        projects: projects,
+        tasks: allTasks,
+        _raw_tasks: allTasks,
+      };
+
+      const dataStr = JSON.stringify(structuredExport, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `workspace-backup-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported workspace backup (${projects.length} projects, ${allTasks.length} tasks)`, { id: toastId });
+    } catch (err: any) {
+      toast.error(`Export failed: ${err?.message || 'Unknown error'}`, { id: toastId });
+    }
   };
 
   const handleExport = () => {
@@ -2550,32 +2712,40 @@ export default function App() {
   const projectMetrics = useMemo(() => {
     const metricsMap: Record<string, { total: number, sql: number, funcs: number, ran: number, progress: number }> = {};
     
-    projects.forEach(p => {
-      metricsMap[p.id] = { total: 0, sql: 0, funcs: 0, ran: 0, progress: 0 };
+    // 1. Pre-populate from project metadata summary
+    projects.forEach((p: any) => {
+      const total = Number(p.totalTasks ?? 0);
+      const sql = Number(p.sqlCount ?? 0);
+      const funcs = Number(p.functionCount ?? 0);
+      const ran = Number(p.ranCount ?? 0);
+      metricsMap[p.id] = {
+        total,
+        sql,
+        funcs,
+        ran,
+        progress: total === 0 ? 0 : Math.round((ran / total) * 100)
+      };
     });
 
+    // 2. For any project whose tasks are loaded in memory (e.g. active project), calculate live counts
+    const loadedProjectIds = new Set<string>();
     tasks.forEach(t => {
-      if (!t.projectId) return;
-      if (!metricsMap[t.projectId]) {
-        metricsMap[t.projectId] = { total: 0, sql: 0, funcs: 0, ran: 0, progress: 0 };
-      }
-      const pm = metricsMap[t.projectId];
-      pm.total += 1;
-      if (t.type === "edge_function") {
-        pm.funcs += 1;
-      } else {
-        pm.sql += 1;
-      }
-      if (t.status === "ran") {
-        pm.ran += 1;
-      }
+      if (t.projectId) loadedProjectIds.add(t.projectId);
     });
 
-    projects.forEach(p => {
-      const pm = metricsMap[p.id];
-      if (pm) {
-        pm.progress = pm.total === 0 ? 0 : Math.round((pm.ran / pm.total) * 100);
-      }
+    loadedProjectIds.forEach(projId => {
+      const projTasks = tasks.filter(t => t.projectId === projId);
+      const total = projTasks.length;
+      const sql = projTasks.filter(t => (t.type || 'sql') === 'sql').length;
+      const funcs = projTasks.filter(t => t.type === 'edge_function').length;
+      const ran = projTasks.filter(t => t.status === 'ran').length;
+      metricsMap[projId] = {
+        total,
+        sql,
+        funcs,
+        ran,
+        progress: total === 0 ? 0 : Math.round((ran / total) * 100)
+      };
     });
 
     return metricsMap;

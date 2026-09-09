@@ -384,16 +384,19 @@ export function VersionDetailView({
               </span>
 
               {isProjectDeleted && (
-                <span className="text-[8.5px] font-semibold px-1.5 py-0.5 rounded text-zinc-500 bg-zinc-500/15 border border-zinc-500/20 shrink-0 whitespace-nowrap">
-                  Deleted
-                </span>
+                <>
+                  <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                  <span className="text-[10px] sm:text-xs text-rose-600 dark:text-rose-400 font-medium shrink-0 whitespace-nowrap">
+                    Deleted
+                  </span>
+                </>
               )}
 
               {versionGroup && versionGroup.length > 1 && (
                 <>
                   <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
-                  <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium flex items-center gap-1 shrink-0 whitespace-nowrap">
-                    <Layers size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" />
+                  <span className="text-[10px] sm:text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 shrink-0 whitespace-nowrap">
+                    <Layers size={12} className="text-blue-500 shrink-0" />
                     <span>{versionGroup.length} revisions</span>
                   </span>
                 </>
@@ -576,23 +579,18 @@ export function VersionDetailView({
 
                         <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                           {isLatest && (
-                            <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                            <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                               Latest
                             </span>
                           )}
                           {isOldest && (
-                            <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-slate-200/60 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-zinc-400">
                               Baseline
                             </span>
                           )}
-                          {!isLatest && !isOldest && (
-                            <span className="text-[8.5px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400">
-                              v{versionNumber}
-                            </span>
-                          )}
 
-                          {/* Diff Counter Pills */}
-                          <div className="flex items-center gap-1 text-[9px] font-mono">
+                          {/* Diff Counter Text */}
+                          <div className="flex items-center gap-1 text-[10px] font-mono">
                             {revAdded.length > 0 && (
                               <span className="text-emerald-600 font-semibold">+{revAdded.length}</span>
                             )}
@@ -611,7 +609,7 @@ export function VersionDetailView({
 
                       {/* Expanded Revision Diff - Containerless */}
                       {isRevExpanded && (
-                        <div className="pt-2 pb-1.5 px-1 sm:px-2 space-y-2 border-t border-slate-100 dark:border-zinc-800/60 mt-1">
+                        <div className="pt-2 pb-1.5 px-1 sm:px-2 space-y-2 mt-0.5">
                           {!hasChanges ? (
                             <div className="py-1 text-xs text-slate-400 dark:text-zinc-500 italic">
                               No task mutations recorded in this revision.
@@ -624,9 +622,9 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
                                     Modified in v{versionNumber} ({revModified.length})
                                   </span>
-                                  <div className="divide-y divide-slate-100 dark:divide-zinc-800/60">
+                                  <div className="space-y-1.5">
                                     {revModified.map((mod) => (
-                                      <div key={mod.task.id} className="py-2 space-y-1.5 text-xs">
+                                      <div key={mod.task.id} className="py-1.5 space-y-1 text-xs">
                                         <div className="flex items-center justify-between gap-2">
                                           <span className="font-bold text-slate-900 dark:text-zinc-100 truncate">
                                             {mod.task.title || "Untitled Task"}
@@ -683,15 +681,15 @@ export function VersionDetailView({
 
                               {/* Added in this Revision - Containerless */}
                               {revAdded.length > 0 && (
-                                <div className="space-y-1 pt-1">
+                                <div className="space-y-1 pt-0.5">
                                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
                                     Added in v{versionNumber} (+{revAdded.length})
                                   </span>
-                                  <div className="divide-y divide-emerald-100 dark:divide-emerald-950/40">
+                                  <div className="space-y-1">
                                     {revAdded.map((t: any) => (
-                                      <div key={t.id} className="py-1.5 px-0.5 text-xs flex items-center justify-between">
+                                      <div key={t.id} className="py-1 px-0.5 text-xs flex items-center justify-between">
                                         <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate">{t.title}</span>
-                                        <span className="text-[9px] font-bold text-emerald-600 uppercase">New Task</span>
+                                        <span className="text-[10px] font-semibold text-emerald-600 uppercase">New Task</span>
                                       </div>
                                     ))}
                                   </div>
@@ -700,15 +698,15 @@ export function VersionDetailView({
 
                               {/* Removed in this Revision - Containerless */}
                               {revRemoved.length > 0 && (
-                                <div className="space-y-1 pt-1">
+                                <div className="space-y-1 pt-0.5">
                                   <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
                                     Removed in v{versionNumber} (-{revRemoved.length})
                                   </span>
-                                  <div className="divide-y divide-rose-100 dark:divide-rose-950/40">
+                                  <div className="space-y-1">
                                     {revRemoved.map((t: any) => (
-                                      <div key={t.id} className="py-1.5 px-0.5 text-xs flex items-center justify-between">
+                                      <div key={t.id} className="py-1 px-0.5 text-xs flex items-center justify-between">
                                         <span className="font-semibold text-slate-800 dark:text-zinc-200 line-through truncate">{t.title}</span>
-                                        <span className="text-[9px] font-bold text-rose-600 uppercase">Deleted</span>
+                                        <span className="text-[10px] font-semibold text-rose-600 uppercase">Deleted</span>
                                       </div>
                                     ))}
                                   </div>
@@ -920,14 +918,15 @@ export function VersionDetailView({
                                   <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
                                     {task.title || "Untitled Task"}
                                   </span>
-                                  <span className="text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 uppercase tracking-wider shrink-0">
+                                  <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                                  <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider shrink-0">
                                     Modified
                                   </span>
                                 </div>
 
                                 <div className="flex items-center gap-2 shrink-0 text-slate-400">
                                   {statusChanged && (
-                                    <span className="text-[8.5px] sm:text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 shrink-0">
+                                    <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 shrink-0">
                                       {oldTask.status} ➔ {task.status}
                                     </span>
                                   )}
@@ -940,7 +939,7 @@ export function VersionDetailView({
 
                               {/* Changes Body & Side-by-Side Diff - Container-less Flush View */}
                               {isDiffExpanded && (
-                                <div className="pb-3 pt-1 px-1 sm:px-2 space-y-2">
+                                <div className="pb-1 pt-1 px-1 sm:px-2 space-y-2">
                                   {/* Containerless responsive layout for metadata changes (old vs new) */}
                                   <div className="text-xs space-y-2 py-1">
                                     {titleChanged && (
@@ -982,13 +981,13 @@ export function VersionDetailView({
 
                                   {/* Side-by-side Diff Component is ONLY shown if code actually changed */}
                                   {codeChanged && (
-                                    <div className="mt-2.5">
+                                    <div className="mt-2">
                                       <SideBySideDiff
                                         oldValue={oldCode}
                                         newValue={newCode}
                                         oldTitle="Old (Before)"
                                         newTitle="New (After)"
-                                        maxHeight="320px"
+                                        maxHeight="360px"
                                         borderless={true}
                                       />
                                     </div>
@@ -1038,8 +1037,9 @@ export function VersionDetailView({
                                   <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
                                     {task.title || "Untitled Task"}
                                   </span>
-                                  <span className="text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 uppercase shrink-0">
-                                    New Task
+                                  <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider shrink-0">
+                                    Added
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
@@ -1051,13 +1051,13 @@ export function VersionDetailView({
                               </div>
 
                               {isExpanded && (
-                                <div className="pb-3 pt-1 px-1 sm:px-2">
+                                <div className="pb-1 pt-1 px-1 sm:px-2">
                                   <SideBySideDiff
                                     oldValue=""
                                     newValue={code}
                                     oldTitle="None (Before)"
                                     newTitle="Created Code"
-                                    maxHeight="250px"
+                                    maxHeight="280px"
                                   />
                                 </div>
                               )}
@@ -1104,7 +1104,8 @@ export function VersionDetailView({
                                   <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate line-through">
                                     {task.title || "Untitled Task"}
                                   </span>
-                                  <span className="text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-800 dark:text-rose-300 uppercase shrink-0">
+                                  <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                                  <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider shrink-0">
                                     Deleted
                                   </span>
                                 </div>
@@ -1117,13 +1118,13 @@ export function VersionDetailView({
                               </div>
 
                               {isExpanded && (
-                                <div className="pb-3 pt-1 px-1 sm:px-2">
+                                <div className="pb-1 pt-1 px-1 sm:px-2">
                                   <SideBySideDiff
                                     oldValue={code}
                                     newValue=""
                                     oldTitle="Deleted Code"
                                     newTitle="None (After)"
-                                    maxHeight="250px"
+                                    maxHeight="280px"
                                   />
                                 </div>
                               )}
@@ -1203,24 +1204,30 @@ export function VersionDetailView({
                             </span>
 
                             {isAdded && (
-                              <span className="text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 shrink-0">
-                                NEW
-                              </span>
+                              <>
+                                <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider shrink-0">
+                                  Added
+                                </span>
+                              </>
                             )}
                             {modifiedDiff && (
-                              <span className="text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 shrink-0">
-                                MODIFIED
-                              </span>
+                              <>
+                                <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+                                <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider shrink-0">
+                                  Modified
+                                </span>
+                              </>
                             )}
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
                             <span
                               className={cn(
-                                "text-[9px] uppercase font-mono px-1.5 py-0.2 rounded font-semibold",
+                                "text-[10px] uppercase font-mono font-semibold",
                                 task.status === "ran"
-                                  ? "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"
-                                  : "text-slate-500 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-slate-500 dark:text-zinc-400"
                               )}
                             >
                               {task.status || "pending"}
