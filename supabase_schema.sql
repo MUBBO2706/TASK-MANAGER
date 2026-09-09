@@ -119,5 +119,22 @@ FROM projects p
 LEFT JOIN tasks t ON p.id = t.project_id
 GROUP BY p.id, p.name, p.created_at;
 
+-- 9. Computed columns for lightweight task previews (capped to 200 characters)
+CREATE OR REPLACE FUNCTION sql_preview(tasks)
+RETURNS text AS $$
+  SELECT substring(coalesce($1.sql, '') from 1 for 200);
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION function_code_preview(tasks)
+RETURNS text AS $$
+  SELECT substring(coalesce($1.function_code, '') from 1 for 200);
+$$ LANGUAGE sql STABLE;
+
+CREATE OR REPLACE FUNCTION edge_files_preview(tasks)
+RETURNS text AS $$
+  SELECT substring(coalesce($1.edge_files->0->>'code', '') from 1 for 200);
+$$ LANGUAGE sql STABLE;
+
+
 
 

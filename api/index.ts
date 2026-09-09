@@ -46,8 +46,11 @@ const checkApiKey = (req: express.Request, res: express.Response, next: express.
 // Helper to fetch lightweight tasks (metadata only) from Supabase to prevent loading heavy sql / function code columns
 async function fetchLightweightTasksFromDB(projectId?: string) {
   try {
-    const columns = 'id, title, type, description, status, folder_id, project_id, production_task_id, created_at, updated_at, order_index';
-    let query = supabase.from('tasks').select(columns);
+    const columnsWithPreviews = 'id, title, type, description, status, folder_id, project_id, production_task_id, created_at, updated_at, order_index, sql_preview, function_code_preview, edge_files_preview';
+    const columnsBasic = 'id, title, type, description, status, folder_id, project_id, production_task_id, created_at, updated_at, order_index';
+    
+    let usePreviews = true;
+    let query = supabase.from('tasks').select(columnsWithPreviews);
     if (projectId) {
       query = query.eq('project_id', projectId);
     }
@@ -56,36 +59,66 @@ async function fetchLightweightTasksFromDB(projectId?: string) {
       .order('order_index', { ascending: true })
       .order('created_at', { ascending: true });
 
-    if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
-      let fallbackQuery = supabase.from('tasks').select(columns);
+    // Fall back to basic columns if preview columns do not exist yet (to prevent query failures on old schema versions)
+    if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('preview') || JSON.stringify(error).includes('column'))) {
+      usePreviews = false;
+      let fallbackQuery = supabase.from('tasks').select(columnsBasic);
       if (projectId) {
         fallbackQuery = fallbackQuery.eq('project_id', projectId);
       }
-      const fallback = await fallbackQuery.order('created_at', { ascending: true });
+      const fallback = await fallbackQuery
+        .order('order_index', { ascending: true })
+        .order('created_at', { ascending: true });
       data = fallback.data;
       error = fallback.error;
     }
 
+    // Fall back further if order_index is missing
+    if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
+      const activeColumns = usePreviews ? columnsWithPreviews : columnsBasic;
+      let fallbackQuery2 = supabase.from('tasks').select(activeColumns);
+      if (projectId) {
+        fallbackQuery2 = fallbackQuery2.eq('project_id', projectId);
+      }
+      const fallback2 = await fallbackQuery2.order('created_at', { ascending: true });
+      data = fallback2.data;
+      error = fallback2.error;
+    }
+
     if (error) throw error;
     
-    return data.map(t => ({
-      id: t.id,
-      title: t.title,
-      type: t.type,
-      sql: '', // Omitted for lightweight initial load
-      functionCode: '', // Omitted for lightweight initial load
-      description: t.description,
-      edgeFiles: [],
-      edgeSecrets: [],
-      status: t.status,
-      folderId: t.folder_id,
-      projectId: t.project_id,
-      productionTaskId: t.production_task_id,
-      createdAt: t.created_at,
-      updatedAt: t.updated_at,
-      orderIndex: t.order_index,
-      isContentFetched: false
-    })) || [];
+    return (data || []).map((t: any) => {
+      let sqlVal = '';
+      let funcCodeVal = '';
+      let edgeFilesVal: any[] = [];
+
+      if (usePreviews) {
+        sqlVal = t.sql_preview || '';
+        funcCodeVal = t.function_code_preview || '';
+        if (t.edge_files_preview) {
+          edgeFilesVal = [{ id: 'preview', name: 'Preview', code: t.edge_files_preview }];
+        }
+      }
+
+      return {
+        id: t.id,
+        title: t.title,
+        type: t.type,
+        sql: sqlVal,
+        functionCode: funcCodeVal,
+        description: t.description,
+        edgeFiles: edgeFilesVal,
+        edgeSecrets: [],
+        status: t.status,
+        folderId: t.folder_id,
+        projectId: t.project_id,
+        productionTaskId: t.production_task_id,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+        orderIndex: t.order_index,
+        isContentFetched: false
+      };
+    }) || [];
   } catch (error) {
     console.error("Error reading lightweight tasks from Supabase:", error);
     return [];

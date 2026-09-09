@@ -186,7 +186,17 @@ const TaskItem = React.memo(({
       {/* Bottom Row: Content / Description */}
       <div className="w-full">
         <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
-          {task.description || (task.type === "edge_function" ? "Edge Function" : (task.isContentFetched ? (task.sql?.trim() || "Empty query") : "Hover to preview query..."))}
+          {task.description || (
+            task.type === "edge_function" ? (
+              task.functionCode?.trim() 
+                ? `fn: ${task.functionCode.trim().replace(/\s+/g, ' ')}` 
+                : "Edge Function"
+            ) : (
+              task.sql?.trim() 
+                ? task.sql.trim().replace(/\s+/g, ' ') 
+                : (task.isContentFetched ? "Empty query" : "Hover to preview query...")
+            )
+          )}
         </p>
       </div>
     </div>
