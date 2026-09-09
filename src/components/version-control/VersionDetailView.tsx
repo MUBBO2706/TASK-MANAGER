@@ -212,11 +212,6 @@ export function VersionDetailView({
   const version = versionGroup && versionGroup.length > 0 ? versionGroup[0] : null;
   const oldestVersionInGroup = versionGroup && versionGroup.length > 0 ? versionGroup[versionGroup.length - 1] : null;
 
-  if (detailLoading) {
-    return <VersionDetailSkeleton />;
-  }
-
-
   const existingProjectIds = useMemo(
     () => new Set(currentProjects.map((p) => p.id)),
     [currentProjects]
@@ -292,6 +287,10 @@ export function VersionDetailView({
     setExpandedRemovedId(null);
     setExpandedTaskId(null);
   }, [version?.id, modifiedTaskDiffs]);
+
+  if (detailLoading) {
+    return <VersionDetailSkeleton />;
+  }
 
   if (!version) {
     return (

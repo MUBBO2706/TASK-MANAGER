@@ -202,8 +202,6 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
         if (currentTaskId && items.some(i => i.id === currentTaskId)) {
           setSelectedItemId(currentTaskId);
           setShowDetailMobile(true);
-        } else if (items.length > 0 && !selectedItemId) {
-          setSelectedItemId(items[0].id);
         }
       } catch (err) {
         console.error("Diff fetching error:", err);
