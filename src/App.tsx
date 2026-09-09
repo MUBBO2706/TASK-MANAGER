@@ -1172,7 +1172,7 @@ export default function App() {
         // Fetch version backups
         const backupsRes = await supabase
           .from('version_backups')
-          .select('*')
+          .select('id, created_at, action, description, is_undone, prod_project_id, staging_project_id')
           .order('created_at', { ascending: false })
           .limit(50);
 
@@ -1192,8 +1192,8 @@ export default function App() {
               isUndone: b.is_undone,
               prodProjectId: b.prod_project_id,
               stagingProjectId: b.staging_project_id,
-              stateBefore: b.state_before,
-              stateAfter: b.state_after
+              stateBefore: null,
+              stateAfter: null
             }));
             setVersionBackups(mappedBackups);
           }

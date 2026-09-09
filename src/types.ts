@@ -79,6 +79,6 @@ export interface VersionBackup {
   isUndone?: boolean;
   prodProjectId: string;
   stagingProjectId: string | null;
-  stateBefore: VersionBackupData;
-  stateAfter: VersionBackupData;
+  stateBefore?: VersionBackupData | null;
+  stateAfter?: VersionBackupData | null;
 }

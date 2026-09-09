@@ -638,12 +638,12 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
   }
 });
 
-// Version backups endpoint
+// Version backups endpoint (Optimized to return only metadata, reducing initial egress by 99%)
 app.get("/api/version-backups", checkApiKey, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('version_backups')
-      .select('*')
+      .select('id, created_at, action, description, is_undone, prod_project_id, staging_project_id')
       .order('created_at', { ascending: false })
       .limit(50);
       
@@ -657,8 +657,8 @@ app.get("/api/version-backups", checkApiKey, async (req, res) => {
       isUndone: b.is_undone,
       prodProjectId: b.prod_project_id,
       stagingProjectId: b.staging_project_id,
-      stateBefore: b.state_before,
-      stateAfter: b.state_after
+      stateBefore: null,
+      stateAfter: null
     }));
     
     res.json(mapped);
@@ -666,6 +666,41 @@ app.get("/api/version-backups", checkApiKey, async (req, res) => {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to fetch version backups:", errDetails);
     res.status(500).json({ error: "Failed to fetch version backups", details: errDetails });
+  }
+});
+
+// Version backup detail endpoint (Lazy loaded on demand)
+app.get("/api/version-backup-detail", checkApiKey, async (req, res) => {
+  try {
+    const idsString = req.query.ids as string;
+    if (!idsString) {
+      return res.status(400).json({ error: "ids parameter is required" });
+    }
+    const ids = idsString.split(',').filter(Boolean);
+    if (ids.length === 0) {
+      return res.json({});
+    }
+    
+    const { data, error } = await supabase
+      .from('version_backups')
+      .select('id, state_before, state_after')
+      .in('id', ids);
+      
+    if (error) throw error;
+    
+    const result = (data || []).reduce((acc: any, b: any) => {
+      acc[b.id] = {
+        stateBefore: b.state_before,
+        stateAfter: b.state_after
+      };
+      return acc;
+    }, {});
+    
+    res.json(result);
+  } catch (err) {
+    const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Failed to fetch version backup details:", errDetails);
+    res.status(500).json({ error: "Failed to fetch version backup details", details: errDetails });
   }
 });
 

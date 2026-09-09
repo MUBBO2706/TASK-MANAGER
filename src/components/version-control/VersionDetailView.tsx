@@ -39,6 +39,7 @@ import { WordDiffView } from "./WordDiffView";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
 import { ConsolidatedBackupGroup } from "./consolidation";
+import { VersionDetailSkeleton } from "./VersionControlSkeleton";
 
 interface VersionDetailViewProps {
   versionGroup?: VersionBackup[] | null;
@@ -47,6 +48,7 @@ interface VersionDetailViewProps {
   onBack?: () => void;
   onRestore: (backup: VersionBackup, type: "undo" | "redo") => Promise<void>;
   isRestoring?: boolean;
+  detailLoading?: boolean;
 }
 
 export function getActionBadgeConfig(action: string) {
@@ -193,6 +195,7 @@ export function VersionDetailView({
   onBack,
   onRestore,
   isRestoring = false,
+  detailLoading = false,
 }: VersionDetailViewProps) {
   const [taskSearch, setTaskSearch] = useLocalStorage("version-detail-task-search", "");
   const [selectedTaskTab, setSelectedTaskTab] = useHybridState<"all" | "sql" | "edge">("vTaskTab", "all");
@@ -208,6 +211,10 @@ export function VersionDetailView({
 
   const version = versionGroup && versionGroup.length > 0 ? versionGroup[0] : null;
   const oldestVersionInGroup = versionGroup && versionGroup.length > 0 ? versionGroup[versionGroup.length - 1] : null;
+
+  if (detailLoading) {
+    return <VersionDetailSkeleton />;
+  }
 
 
   const existingProjectIds = useMemo(

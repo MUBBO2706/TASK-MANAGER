@@ -73,6 +73,21 @@ export function VersionControlPage({
     null
   );
   const [isRestoring, setIsRestoring] = useState(false);
+  const [loadedDetails, setLoadedDetails] = useState<Record<string, { stateBefore: any; stateAfter: any }>>({});
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const enhancedVersionBackups = useMemo(() => {
+    return versionBackups.map(b => {
+      if (loadedDetails[b.id]) {
+        return {
+          ...b,
+          stateBefore: loadedDetails[b.id].stateBefore,
+          stateAfter: loadedDetails[b.id].stateAfter
+        };
+      }
+      return b;
+    });
+  }, [versionBackups, loadedDetails]);
 
   // Selection mode & deletion state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -261,7 +276,7 @@ export function VersionControlPage({
 
   // Filtered timeline backups
   const filteredBackups = useMemo(() => {
-    return versionBackups.filter((b) => {
+    return enhancedVersionBackups.filter((b) => {
       // 1. Category filter
       if (filterCategory === "tasks") {
         if (!["create_task", "update_task", "update_status", "delete_task"].includes(b.action))
@@ -287,7 +302,7 @@ export function VersionControlPage({
         (b.stagingProjectId && b.stagingProjectId.toLowerCase().includes(q))
       );
     });
-  }, [versionBackups, filterCategory, searchQuery]);
+  }, [enhancedVersionBackups, filterCategory, searchQuery]);
 
 
   const groupedBackups = useMemo(() => {
@@ -303,8 +318,49 @@ export function VersionControlPage({
   }, [selectedGroup]);
 
   const selectedVersion = useMemo(() => {
-    return versionBackups.find((b) => b.id === selectedVersionId) || null;
-  }, [versionBackups, selectedVersionId]);
+    return enhancedVersionBackups.find((b) => b.id === selectedVersionId) || null;
+  }, [enhancedVersionBackups, selectedVersionId]);
+
+  // Dynamically load detailed backups when a version group is selected
+  useEffect(() => {
+    if (!selectedVersionGroup || selectedVersionGroup.length === 0) return;
+
+    // Check if any item in the selected group needs details loaded
+    const missingIds = selectedVersionGroup
+      .filter(item => {
+        const cached = loadedDetails[item.id];
+        const hasBefore = cached ? !!cached.stateBefore : !!item.stateBefore;
+        const hasAfter = cached ? !!cached.stateAfter : !!item.stateAfter;
+        return !hasBefore && !hasAfter;
+      })
+      .map(item => item.id);
+
+    if (missingIds.length === 0) return;
+
+    const fetchDetails = async () => {
+      try {
+        setDetailLoading(true);
+        const devKeysModules = import.meta.glob('../../lib/dev-keys.ts', { eager: true });
+        const devKeys: any = devKeysModules['../../lib/dev-keys.ts'] || {};
+        const apiKey = import.meta.env.VITE_API_KEY || devKeys.VITE_API_KEY || "sk_sync_b4k92jdm10";
+
+        const res = await fetch(`/api/version-backup-detail?ids=${missingIds.join(',')}&api_key=${apiKey}`);
+        if (!res.ok) throw new Error("Failed to fetch version backup details");
+
+        const data = await res.json();
+        setLoadedDetails(prev => ({
+          ...prev,
+          ...data
+        }));
+      } catch (err) {
+        console.error("Error lazy-loading version backup details:", err);
+      } finally {
+        setDetailLoading(false);
+      }
+    };
+
+    fetchDetails();
+  }, [selectedVersionGroup, loadedDetails]);
 
   const handleSelectVersion = (version: VersionBackup) => {
     setSelectedVersionId(version.id);
@@ -444,7 +500,7 @@ export function VersionControlPage({
           <div className="text-xs font-semibold text-slate-500 dark:text-zinc-400 shrink-0 flex items-center gap-1.5">
             <span>{groupedBackups.length} {groupedBackups.length === 1 ? "snapshot" : "snapshots"}</span>
             <span className="text-slate-300 dark:text-zinc-700 font-normal">•</span>
-            <span>{versionBackups.length} {versionBackups.length === 1 ? "revision" : "revisions"}</span>
+            <span>{enhancedVersionBackups.length} {enhancedVersionBackups.length === 1 ? "revision" : "revisions"}</span>
           </div>
         </header>
       )}
@@ -822,6 +878,7 @@ export function VersionControlPage({
             }}
             onRestore={handleRestore}
             isRestoring={isRestoring}
+            detailLoading={detailLoading}
           />
         </div>
       </div>
