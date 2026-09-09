@@ -48,7 +48,7 @@ import { DebouncedCodeEditor, DebouncedTitleInput } from "./components/SharedUI"
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { VersionControlPage, VersionControlSkeleton } from "./components/version-control";
-import SkeletonLoader, { TaskItemSkeleton } from "./components/SkeletonLoader";
+import SkeletonLoader, { TaskItemSkeleton, EditorSkeleton } from "./components/SkeletonLoader";
 import DiffViewerSkeleton, { NoChangesDiffSkeleton } from "./components/DiffViewerSkeleton";
 import { SqlTask, Project, ProjectSummary, VersionBackup, VersionBackupData, VersionAction } from "./types";
 import { cn } from "./lib/utils";
@@ -74,6 +74,7 @@ interface TaskItemProps {
   cancelLongPress: () => void;
   onTaskClick: (taskId: string) => void;
   onStatusToggle: (taskId: string, currentStatus: string, e: React.MouseEvent) => void;
+  onHover?: (taskId: string) => void;
   provided: any;
   snapshot: any;
 }
@@ -92,6 +93,7 @@ const TaskItem = React.memo(({
   cancelLongPress,
   onTaskClick,
   onStatusToggle,
+  onHover,
   provided,
   snapshot
 }: TaskItemProps) => {
@@ -103,7 +105,11 @@ const TaskItem = React.memo(({
         ...provided.draggableProps.style,
         opacity: snapshot.isDragging ? 0.9 : 1,
       }}
-      onPointerDown={(e) => onPointerDown(e, task.id)}
+      onPointerDown={(e) => {
+        onHover?.(task.id);
+        onPointerDown(e, task.id);
+      }}
+      onMouseEnter={() => onHover?.(task.id)}
       onPointerMove={onPointerMove}
       onPointerUp={cancelLongPress}
       onPointerCancel={cancelLongPress}
@@ -1432,29 +1438,37 @@ export default function App() {
     setIsProjectTasksLoading(true);
 
     const loadTasksForSelectedProject = async () => {
-      try {
-        let tasksData: any[] = [];
-        let { data, error } = await supabase
-          .from('tasks')
-          .select('*')
-          .in('project_id', idsNeedingFetch)
-          .order('order_index', { ascending: true })
-          .order('created_at', { ascending: true });
+      const CHUNK_SIZE = 12;
+      let offset = 0;
+      let hasMore = true;
 
-        if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
-          const fallback = await supabase
+      try {
+        while (hasMore && isSubscribed) {
+          let chunkData: any[] = [];
+          let { data, error } = await supabase
             .from('tasks')
             .select('*')
             .in('project_id', idsNeedingFetch)
-            .order('created_at', { ascending: true });
-          tasksData = fallback.data || [];
-        } else {
-          tasksData = data || [];
-        }
+            .order('order_index', { ascending: true })
+            .order('created_at', { ascending: true })
+            .range(offset, offset + CHUNK_SIZE - 1);
 
-        if (isSubscribed) {
-          if (tasksData.length > 0) {
-            const mappedTasks: SqlTask[] = tasksData.map(t => ({
+          if (error && (error.code === 'PGRST204' || JSON.stringify(error).includes('order_index'))) {
+            const fallback = await supabase
+              .from('tasks')
+              .select('*')
+              .in('project_id', idsNeedingFetch)
+              .order('created_at', { ascending: true })
+              .range(offset, offset + CHUNK_SIZE - 1);
+            chunkData = fallback.data || [];
+          } else {
+            chunkData = data || [];
+          }
+
+          if (!isSubscribed) break;
+
+          if (chunkData.length > 0) {
+            const mappedTasks: SqlTask[] = chunkData.map(t => ({
               id: t.id,
               title: t.title,
               type: t.type,
@@ -1473,11 +1487,30 @@ export default function App() {
             }));
 
             setTasks(prev => {
-              const existingFiltered = prev.filter(t => !idsNeedingFetch.includes(t.projectId || ''));
-              return [...existingFiltered, ...mappedTasks];
+              const taskMap = new Map<string, SqlTask>(prev.map(t => [t.id, t]));
+              mappedTasks.forEach(t => taskMap.set(t.id, t));
+              return Array.from(taskMap.values()).sort((a, b) => {
+                if (a.orderIndex !== undefined && a.orderIndex !== null && b.orderIndex !== undefined && b.orderIndex !== null) {
+                  return a.orderIndex - b.orderIndex;
+                }
+                if (a.orderIndex !== undefined && a.orderIndex !== null) return -1;
+                if (b.orderIndex !== undefined && b.orderIndex !== null) return 1;
+                return b.createdAt - a.createdAt;
+              });
             });
+
+            // Turn off skeleton loader as soon as the first chunk arrives so user can interact immediately
+            setIsProjectTasksLoading(false);
           }
 
+          if (chunkData.length < CHUNK_SIZE) {
+            hasMore = false;
+          } else {
+            offset += CHUNK_SIZE;
+          }
+        }
+
+        if (isSubscribed) {
           setLoadedProjectIds(prev => {
             const next = new Set(prev);
             idsNeedingFetch.forEach(id => next.add(id));
@@ -1505,6 +1538,64 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [lastSavedTime, setLastSavedTime] = useState(0);
   const prevTaskIdRef = useRef<string | null>(null);
+
+  // Lazy Full-Content On-Demand Loading & Hover Pre-fetching
+  const [loadingTaskContentId, setLoadingTaskContentId] = useState<string | null>(null);
+  const fetchingTaskContentIdsRef = useRef<Set<string>>(new Set());
+
+  const fetchTaskFullContent = async (taskId: string, isSilent = false) => {
+    if (!taskId) return;
+    const task = tasksRef.current.find(t => t.id === taskId);
+    if (task && task.isContentFetched) return;
+    if (fetchingTaskContentIdsRef.current.has(taskId)) return;
+
+    fetchingTaskContentIdsRef.current.add(taskId);
+    if (!isSilent) {
+      setLoadingTaskContentId(taskId);
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('id, sql, function_code, edge_files, edge_secrets')
+        .eq('id', taskId)
+        .single();
+
+      if (!error && data) {
+        setTasks(prev => prev.map(t => {
+          if (t.id === taskId) {
+            return {
+              ...t,
+              sql: data.sql ?? t.sql ?? '',
+              functionCode: data.function_code ?? t.functionCode ?? '',
+              edgeFiles: data.edge_files ?? t.edgeFiles ?? [],
+              edgeSecrets: data.edge_secrets ?? t.edgeSecrets ?? [],
+              isContentFetched: true,
+            };
+          }
+          return t;
+        }));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch full task content", err);
+    } finally {
+      fetchingTaskContentIdsRef.current.delete(taskId);
+      setLoadingTaskContentId(prev => (prev === taskId ? null : prev));
+    }
+  };
+
+  const prefetchTaskContent = (taskId: string) => {
+    fetchTaskFullContent(taskId, true);
+  };
+
+  useEffect(() => {
+    if (selectedTaskId) {
+      const task = tasksRef.current.find(t => t.id === selectedTaskId);
+      if (task && !task.isContentFetched) {
+        fetchTaskFullContent(selectedTaskId);
+      }
+    }
+  }, [selectedTaskId]);
 
   useEffect(() => {
     if (selectedTaskId) {
@@ -3349,6 +3440,7 @@ export default function App() {
                             cancelLongPress={cancelLongPress}
                             onTaskClick={handleTaskClick}
                             onStatusToggle={handleStatusToggle}
+                            onHover={prefetchTaskContent}
                             provided={provided}
                             snapshot={snapshot}
                           />
@@ -3843,6 +3935,14 @@ export default function App() {
         )}
       >
         {selectedTask ? (
+          !selectedTask.isContentFetched && loadingTaskContentId === selectedTask.id ? (
+            <EditorSkeleton
+              urlTaskId={selectedTask.id}
+              activeTab={selectedTask.type}
+              edgeSidebarWidth={edgeSidebarWidthState}
+              onEdgeSidebarWidthChange={setEdgeSidebarWidthState}
+            />
+          ) : (
           <>
             {/* Editor Header */}
             <div className="flex flex-col pt-[env(safe-area-inset-top,0px)] border-b border-slate-200 dark:border-[#0a0a0a] bg-white dark:bg-[#0a0a0a] transition-colors">
@@ -4025,6 +4125,7 @@ export default function App() {
               </div>
             )}
           </>
+          )
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 p-8">
             {activeTab === "sql" ? (
