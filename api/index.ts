@@ -1,5 +1,6 @@
 import express from "express";
 import { createClient } from '@supabase/supabase-js';
+import { diffLines } from 'diff';
 
 const app = express();
 
@@ -693,6 +694,175 @@ app.post("/api/sync", checkApiKey, async (req, res) => {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to sync data to memory:", errDetails);
     res.status(500).json({ error: "Failed to sync data", details: errDetails });
+  }
+});
+
+app.get("/api/diff-summary", checkApiKey, async (req, res) => {
+  try {
+    const { stagingProjectId, prodProjectId } = req.query;
+    if (!stagingProjectId || !prodProjectId) {
+      return res.status(400).json({ error: "stagingProjectId and prodProjectId are required" });
+    }
+
+    const [prodTasks, stagingTasks] = await Promise.all([
+      fetchTasksFromDB(prodProjectId as string),
+      fetchTasksFromDB(stagingProjectId as string)
+    ]);
+
+    const prodTaskMap = new Map<string, any>(prodTasks.map(t => [t.id, t]));
+    const stagingParentMap = new Map<string, any>();
+    stagingTasks.forEach(st => {
+      if (st.productionTaskId) stagingParentMap.set(st.productionTaskId, st);
+    });
+
+    const items: any[] = [];
+
+    // Find Added and Modified
+    stagingTasks.forEach(st => {
+      if (!st.productionTaskId || !prodTaskMap.has(st.productionTaskId)) {
+        // Added
+        const content = st.type === "edge_function" ? 
+           (st.edgeFiles?.map((f: any) => f.code).join('\n') || '') + '\n' + (st.edgeSecrets?.map((s: any) => s.key + '=' + s.value).join('\n') || '') 
+           : (st.sql || '');
+        const lines = content.trim() ? content.split('\n').length : 0;
+        items.push({
+          id: st.id,
+          title: st.title || "Untitled",
+          type: st.type || 'sql',
+          status: "added",
+          prodTaskId: null,
+          stagingTaskId: st.id,
+          additions: lines,
+          deletions: 0,
+          updatedAt: st.updatedAt
+        });
+      } else {
+        // Check Modified
+        const pt = prodTaskMap.get(st.productionTaskId)!;
+        let isModified = false;
+        let stStr = '';
+        let ptStr = '';
+
+        if (st.type === 'edge_function') {
+           const stFilesStr = JSON.stringify(st.edgeFiles?.map((f: any) => ({ n: f.name, c: f.code })) || []);
+           const ptFilesStr = JSON.stringify(pt.edgeFiles?.map((f: any) => ({ n: f.name, c: f.code })) || []);
+           if (stFilesStr !== ptFilesStr) isModified = true;
+           
+           const stSecretsStr = JSON.stringify(st.edgeSecrets?.map((s: any) => ({ k: s.key, v: s.value })) || []);
+           const ptSecretsStr = JSON.stringify(pt.edgeSecrets?.map((s: any) => ({ k: s.key, v: s.value })) || []);
+           if (stSecretsStr !== ptSecretsStr) isModified = true;
+           
+           stStr = (st.edgeFiles?.map((f: any) => f.code).join('\n') || '') + '\n' + (st.edgeSecrets?.map((s: any) => s.key + '=' + s.value).join('\n') || '');
+           ptStr = (pt.edgeFiles?.map((f: any) => f.code).join('\n') || '') + '\n' + (pt.edgeSecrets?.map((s: any) => s.key + '=' + s.value).join('\n') || '');
+        } else {
+           if (st.sql !== pt.sql) isModified = true;
+           stStr = st.sql || '';
+           ptStr = pt.sql || '';
+        }
+
+        if (isModified) {
+          const diffResult = diffLines(ptStr, stStr);
+          let additions = 0;
+          let deletions = 0;
+          diffResult.forEach(part => {
+            if (part.added) additions += part.count || 0;
+            else if (part.removed) deletions += part.count || 0;
+          });
+
+          items.push({
+            id: st.id,
+            title: st.title || "Untitled",
+            type: st.type || 'sql',
+            status: "modified",
+            prodTaskId: pt.id,
+            stagingTaskId: st.id,
+            additions,
+            deletions,
+            updatedAt: st.updatedAt
+          });
+        }
+      }
+    });
+
+    // Find Deleted
+    prodTasks.forEach(pt => {
+      if (!stagingParentMap.has(pt.id)) {
+        const content = pt.type === "edge_function" ? 
+           (pt.edgeFiles?.map((f: any) => f.code).join('\n') || '') + '\n' + (pt.edgeSecrets?.map((s: any) => s.key + '=' + s.value).join('\n') || '') 
+           : (pt.sql || '');
+        const lines = content.trim() ? content.split('\n').length : 0;
+        items.push({
+          id: pt.id,
+          title: pt.title || "Untitled",
+          type: pt.type || 'sql',
+          status: "deleted",
+          prodTaskId: pt.id,
+          stagingTaskId: null,
+          additions: 0,
+          deletions: lines,
+          updatedAt: pt.updatedAt
+        });
+      }
+    });
+
+    res.json(items);
+  } catch (err) {
+    const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Failed to generate diff summary:", errDetails);
+    res.status(500).json({ error: "Failed to generate diff summary", details: errDetails });
+  }
+});
+
+app.get("/api/diff-detail", checkApiKey, async (req, res) => {
+  try {
+    const { prodTaskId, stagingTaskId } = req.query;
+    let prodTask: any = null;
+    let stagingTask: any = null;
+
+    const queries: Promise<any>[] = [];
+    if (prodTaskId) {
+      queries.push(supabase.from('tasks').select('*').eq('id', prodTaskId).single().then((res: any) => res.data));
+    } else {
+      queries.push(Promise.resolve(null));
+    }
+
+    if (stagingTaskId) {
+      queries.push(supabase.from('tasks').select('*').eq('id', stagingTaskId).single().then((res: any) => res.data));
+    } else {
+      queries.push(Promise.resolve(null));
+    }
+
+    const [prodData, stagingData] = await Promise.all(queries);
+
+    const mapTask = (t: any) => {
+      if (!t) return null;
+      return {
+        id: t.id,
+        title: t.title,
+        type: t.type,
+        sql: t.sql,
+        functionCode: t.function_code,
+        description: t.description,
+        edgeFiles: t.edge_files,
+        edgeSecrets: t.edge_secrets,
+        status: t.status,
+        folderId: t.folder_id,
+        projectId: t.project_id,
+        productionTaskId: t.production_task_id,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+        orderIndex: t.order_index
+      };
+    };
+
+    res.json({
+      prodTask: mapTask(prodData),
+      stagingTask: mapTask(stagingData)
+    });
+  } catch (err) {
+    const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Failed to fetch diff details:", errDetails);
+    res.status(500).json({ error: "Failed to fetch diff details", details: errDetails });
   }
 });
 

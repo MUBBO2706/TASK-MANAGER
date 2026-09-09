@@ -33,6 +33,8 @@ interface DiffItem {
   stagingTask: SqlTask | null;
   additions: number;
   deletions: number;
+  prodTaskId?: string | null;
+  stagingTaskId?: string | null;
 }
 
 export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onClose, onMerge, onReject, isMerging, isRejecting, expectedDiffCount }: DiffViewerProps) {
@@ -40,6 +42,7 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
   const urlDiffTaskId = searchParams.get("diffTaskId");
 
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [diffItems, setDiffItems] = useState<DiffItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(urlDiffTaskId || null);
   const [showDetailMobile, setShowDetailMobile] = useState<boolean>(Boolean(urlDiffTaskId));
@@ -175,119 +178,32 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
         const devKeys: any = devKeysModules['../lib/dev-keys.ts'] || {};
         const apiKey = import.meta.env.VITE_API_KEY || devKeys.VITE_API_KEY || "sk_sync_b4k92jdm10";
         
-        const [prodRes, stagingRes] = await Promise.all([
-          fetch(`/export.json?projectId=${prodProjectId}&api_key=${apiKey}`),
-          fetch(`/export.json?projectId=${stagingProjectId}&api_key=${apiKey}`)
-        ]);
+        const res = await fetch(`/api/diff-summary?stagingProjectId=${stagingProjectId}&prodProjectId=${prodProjectId}&api_key=${apiKey}`);
+        if (!res.ok) throw new Error("Failed to fetch diff summary");
 
-        if (!prodRes.ok || !stagingRes.ok) throw new Error("Failed to fetch project exports");
-
-        const prodExport = await prodRes.json();
-        const stagingExport = await stagingRes.json();
-
-        const prodTasks: SqlTask[] = prodExport._raw_tasks || [];
-        const stagingTasks: SqlTask[] = stagingExport._raw_tasks || [];
-
-        const prodTaskMap = new Map<string, SqlTask>(prodTasks.map(t => [t.id, t]));
-        const stagingParentMap = new Map<string, SqlTask>(); // prodTask_id -> stagingTask
-        
-        stagingTasks.forEach(st => {
-          if (st.productionTaskId) stagingParentMap.set(st.productionTaskId, st);
-        });
-
-        const items: DiffItem[] = [];
-
-        // Find Added and Modified
-        stagingTasks.forEach(st => {
-          if (!st.productionTaskId || !prodTaskMap.has(st.productionTaskId)) {
-            // Added
-            const sql = st.type === "edge_function" ? 
-               (st.edgeFiles?.map(f => f.code).join('\n') || '') + '\n' + (st.edgeSecrets?.map(s => s.key + '=' + s.value).join('\n') || '') 
-               : (st.sql || '');
-            const lines = sql.trim() ? sql.split('\n').length : 0;
-            items.push({
-              id: st.id,
-              title: st.title || "Untitled",
-              type: st.type || 'sql',
-              status: "added",
-              prodTask: null,
-              stagingTask: st,
-              additions: lines,
-              deletions: 0
-            });
-          } else {
-            // Check Modified
-            const pt = prodTaskMap.get(st.productionTaskId)!;
-            let isModified = false;
-            let stStr = '';
-            let ptStr = '';
-
-            if (st.type === 'edge_function') {
-               const stFilesStr = JSON.stringify(st.edgeFiles?.map(f => ({ n: f.name, c: f.code })) || []);
-               const ptFilesStr = JSON.stringify(pt.edgeFiles?.map(f => ({ n: f.name, c: f.code })) || []);
-               if (stFilesStr !== ptFilesStr) isModified = true;
-               
-               const stSecretsStr = JSON.stringify(st.edgeSecrets?.map(s => ({ k: s.key, v: s.value })) || []);
-               const ptSecretsStr = JSON.stringify(pt.edgeSecrets?.map(s => ({ k: s.key, v: s.value })) || []);
-               if (stSecretsStr !== ptSecretsStr) isModified = true;
-               
-               stStr = (st.edgeFiles?.map(f => f.code).join('\n') || '') + '\n' + (st.edgeSecrets?.map(s => s.key + '=' + s.value).join('\n') || '');
-               ptStr = (pt.edgeFiles?.map(f => f.code).join('\n') || '') + '\n' + (pt.edgeSecrets?.map(s => s.key + '=' + s.value).join('\n') || '');
-            } else {
-               if (st.sql !== pt.sql) isModified = true;
-               stStr = st.sql || '';
-               ptStr = pt.sql || '';
-            }
-
-            if (isModified) {
-              const diffResult = Diff.diffLines(ptStr, stStr);
-              let additions = 0;
-              let deletions = 0;
-              diffResult.forEach(part => {
-                if (part.added) additions += part.count || 0;
-                else if (part.removed) deletions += part.count || 0;
-              });
-
-              items.push({
-                id: st.id,
-                title: st.title || "Untitled",
-                type: st.type || 'sql',
-                status: "modified",
-                prodTask: pt,
-                stagingTask: st,
-                additions,
-                deletions
-              });
-            }
-          }
-        });
-
-        // Find Deleted
-        prodTasks.forEach(pt => {
-          if (!stagingParentMap.has(pt.id)) {
-            const sql = pt.type === "edge_function" ? 
-               (pt.edgeFiles?.map(f => f.code).join('\n') || '') + '\n' + (pt.edgeSecrets?.map(s => s.key + '=' + s.value).join('\n') || '') 
-               : (pt.sql || '');
-            const lines = sql.trim() ? sql.split('\n').length : 0;
-            items.push({
-              id: pt.id,
-              title: pt.title || "Untitled",
-              type: pt.type || 'sql',
-              status: "deleted",
-              prodTask: pt,
-              stagingTask: null,
-              additions: 0,
-              deletions: lines
-            });
-          }
-        });
+        const data = await res.json();
+        const items: DiffItem[] = data.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          type: item.type,
+          status: item.status,
+          prodTask: null, // Fetched on demand!
+          stagingTask: null, // Fetched on demand!
+          additions: item.additions,
+          deletions: item.deletions,
+          prodTaskId: item.prodTaskId,
+          stagingTaskId: item.stagingTaskId
+        }));
 
         setDiffItems(items);
         setSelectedForMerge(new Set(items.map(i => i.id)));
+        
         const currentTaskId = searchParams.get("diffTaskId");
         if (currentTaskId && items.some(i => i.id === currentTaskId)) {
           setSelectedItemId(currentTaskId);
           setShowDetailMobile(true);
+        } else if (items.length > 0 && !selectedItemId) {
+          setSelectedItemId(items[0].id);
         }
       } catch (err) {
         console.error("Diff fetching error:", err);
@@ -298,6 +214,51 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
 
     fetchDiffs();
   }, [prodProjectId, stagingProjectId]);
+
+  useEffect(() => {
+    if (!selectedItemId) return;
+    const item = diffItems.find(i => i.id === selectedItemId);
+    if (!item) return;
+
+    // Check if we already loaded the tasks
+    const hasProd = item.status === 'added' ? true : !!item.prodTask;
+    const hasStaging = item.status === 'deleted' ? true : !!item.stagingTask;
+    if (hasProd && hasStaging) return;
+
+    const fetchDetail = async () => {
+      try {
+        setDetailLoading(true);
+        const devKeysModules = import.meta.glob('../lib/dev-keys.ts', { eager: true });
+        const devKeys: any = devKeysModules['../lib/dev-keys.ts'] || {};
+        const apiKey = import.meta.env.VITE_API_KEY || devKeys.VITE_API_KEY || "sk_sync_b4k92jdm10";
+
+        const prodId = item.prodTaskId || '';
+        const stagingId = item.stagingTaskId || '';
+
+        const res = await fetch(`/api/diff-detail?prodTaskId=${prodId}&stagingTaskId=${stagingId}&api_key=${apiKey}`);
+        if (!res.ok) throw new Error("Failed to fetch diff details");
+
+        const data = await res.json();
+
+        setDiffItems(prev => prev.map(i => {
+          if (i.id === selectedItemId) {
+            return {
+              ...i,
+              prodTask: data.prodTask,
+              stagingTask: data.stagingTask
+            };
+          }
+          return i;
+        }));
+      } catch (err) {
+        console.error("Failed to load diff details on-demand:", err);
+      } finally {
+        setDetailLoading(false);
+      }
+    };
+
+    fetchDetail();
+  }, [selectedItemId, diffItems.length]);
 
   // Derived state for the right panel
   const getOldValue = () => {
@@ -377,7 +338,7 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
     } else {
       setSelectedTab('sql');
     }
-  }, [selectedItem]);
+  }, [selectedItem, selectedItem?.prodTask, selectedItem?.stagingTask]);
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50 dark:bg-black font-sans overflow-hidden">
@@ -760,103 +721,109 @@ export default function DiffViewer({ stagingProjectId, prodProjectId, theme, onC
                               visibility: hidden !important;
                             }
                           `}</style>
-                          <DiffEditor
-                            height="100%"
-                            loading={<DiffCodeSkeleton />}
-                            language={
-                              // Auto-detect language based on edge function extensions
-                              selectedItem.type === 'edge_function' && selectedTab.endsWith('.ts') ? 'typescript' : 
-                              selectedItem.type === 'edge_function' && selectedTab.endsWith('.json') ? 'json' : 'sql'
-                            }
-                            original={getOldValue() || ''}
-                            modified={getNewValue() || ''}
-                            theme={theme === 'dark' ? 'vs-dark' : 'light'}
-                            options={{
-                              wordWrap: 'off',          
-                              renderSideBySide: true,
-                              useInlineViewWhenSpaceIsLimited: false,
-                              renderIndicators: false,
-                              readOnly: true,
-                              domReadOnly: true,
-                              readOnlyMessage: { value: '' },
-                              contextmenu: false,
-                              quickSuggestions: false,
-                              parameterHints: { enabled: false },
-                              suggestOnTriggerCharacters: false,
-                              acceptSuggestionOnEnter: 'off',
-                              tabCompletion: 'off',
-                              wordBasedSuggestions: 'off',
-                              scrollBeyondLastLine: false,
-                              minimap: { enabled: false }, 
-                              renderMarginRevertIcon: false, 
-                              scrollbar: {
-                                horizontal: 'visible',
-                                vertical: 'visible'
-                              },
-                              folding: false, // Hides folding column
-                              glyphMargin: false, // Hides glyph column
-                              lineDecorationsWidth: 6, // Clean spacing between line numbers and code
-                              lineNumbersMinChars: 3, // Proper width for line numbers up to 3 digits
-                              diffAlgorithm: 'advanced',
-                              ignoreTrimWhitespace: false,
-                            }}
-                            onMount={(editor) => {
-                              const original = editor.getOriginalEditor();
-                              const modified = editor.getModifiedEditor();
+                          {detailLoading ? (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-[#0a0a0a]">
+                              <DiffCodeSkeleton />
+                            </div>
+                          ) : (
+                            <DiffEditor
+                              height="100%"
+                              loading={<DiffCodeSkeleton />}
+                              language={
+                                // Auto-detect language based on edge function extensions
+                                selectedItem.type === 'edge_function' && selectedTab.endsWith('.ts') ? 'typescript' : 
+                                selectedItem.type === 'edge_function' && selectedTab.endsWith('.json') ? 'json' : 'sql'
+                              }
+                              original={getOldValue() || ''}
+                              modified={getNewValue() || ''}
+                              theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                              options={{
+                                wordWrap: 'off',          
+                                renderSideBySide: true,
+                                useInlineViewWhenSpaceIsLimited: false,
+                                renderIndicators: false,
+                                readOnly: true,
+                                domReadOnly: true,
+                                readOnlyMessage: { value: '' },
+                                contextmenu: false,
+                                quickSuggestions: false,
+                                parameterHints: { enabled: false },
+                                suggestOnTriggerCharacters: false,
+                                acceptSuggestionOnEnter: 'off',
+                                tabCompletion: 'off',
+                                wordBasedSuggestions: 'off',
+                                scrollBeyondLastLine: false,
+                                minimap: { enabled: false }, 
+                                renderMarginRevertIcon: false, 
+                                scrollbar: {
+                                  horizontal: 'visible',
+                                  vertical: 'visible'
+                                },
+                                folding: false, // Hides folding column
+                                glyphMargin: false, // Hides glyph column
+                                lineDecorationsWidth: 6, // Clean spacing between line numbers and code
+                                lineNumbersMinChars: 3, // Proper width for line numbers up to 3 digits
+                                diffAlgorithm: 'advanced',
+                                ignoreTrimWhitespace: false,
+                              }}
+                              onMount={(editor) => {
+                                const original = editor.getOriginalEditor();
+                                const modified = editor.getModifiedEditor();
 
-                              const disableMobileKeyboard = (ed: any) => {
-                                const domNode = ed.getDomNode();
-                                if (!domNode) return;
+                                const disableMobileKeyboard = (ed: any) => {
+                                  const domNode = ed.getDomNode();
+                                  if (!domNode) return;
 
-                                // Capture phase listener to prevent focusin events
-                                domNode.addEventListener('focusin', (e: Event) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  if (document.activeElement instanceof HTMLElement) {
-                                    document.activeElement.blur();
-                                  }
-                                }, true);
+                                  // Capture phase listener to prevent focusin events
+                                  domNode.addEventListener('focusin', (e: Event) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (document.activeElement instanceof HTMLElement) {
+                                      document.activeElement.blur();
+                                    }
+                                  }, true);
 
-                                const applyAttributes = () => {
-                                  const textareas = domNode.querySelectorAll('textarea');
-                                  textareas.forEach((ta: HTMLTextAreaElement) => {
-                                    // Override focus method to prevent programmatic focus from opening keypad
-                                    ta.focus = () => {};
-                                    ta.blur();
-                                    ta.disabled = true;
-                                    ta.setAttribute('readonly', 'true');
-                                    ta.setAttribute('inputmode', 'none');
-                                    ta.setAttribute('tabindex', '-1');
-                                    ta.setAttribute('aria-hidden', 'true');
+                                  const applyAttributes = () => {
+                                    const textareas = domNode.querySelectorAll('textarea');
+                                    textareas.forEach((ta: HTMLTextAreaElement) => {
+                                      // Override focus method to prevent programmatic focus from opening keypad
+                                      ta.focus = () => {};
+                                      ta.blur();
+                                      ta.disabled = true;
+                                      ta.setAttribute('readonly', 'true');
+                                      ta.setAttribute('inputmode', 'none');
+                                      ta.setAttribute('tabindex', '-1');
+                                      ta.setAttribute('aria-hidden', 'true');
+                                    });
+                                  };
+
+                                  applyAttributes();
+
+                                  const observer = new MutationObserver(() => {
+                                    applyAttributes();
                                   });
+                                  observer.observe(domNode, { childList: true, subtree: true });
                                 };
 
-                                applyAttributes();
+                                disableMobileKeyboard(original);
+                                disableMobileKeyboard(modified);
 
-                                const observer = new MutationObserver(() => {
-                                  applyAttributes();
+                                original.updateOptions({ wordWrap: 'off' });
+                                modified.updateOptions({ wordWrap: 'off' });
+
+                                original.onDidScrollChange((e) => {
+                                  if (e.scrollLeftChanged) {
+                                    modified.setScrollLeft(e.scrollLeft);
+                                  }
                                 });
-                                observer.observe(domNode, { childList: true, subtree: true });
-                              };
-
-                              disableMobileKeyboard(original);
-                              disableMobileKeyboard(modified);
-
-                              original.updateOptions({ wordWrap: 'off' });
-                              modified.updateOptions({ wordWrap: 'off' });
-
-                              original.onDidScrollChange((e) => {
-                                if (e.scrollLeftChanged) {
-                                  modified.setScrollLeft(e.scrollLeft);
-                                }
-                              });
-                              modified.onDidScrollChange((e) => {
-                                if (e.scrollLeftChanged) {
-                                  original.setScrollLeft(e.scrollLeft);
-                                }
-                              });
-                            }}
-                          />
+                                modified.onDidScrollChange((e) => {
+                                  if (e.scrollLeftChanged) {
+                                    original.setScrollLeft(e.scrollLeft);
+                                  }
+                                });
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
                   </div>
