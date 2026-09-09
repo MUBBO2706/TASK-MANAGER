@@ -604,103 +604,110 @@ export function VersionDetailView({
                         </div>
                       </div>
 
-                      {/* Expanded Revision Diff */}
+                      {/* Expanded Revision Diff - Containerless */}
                       {isRevExpanded && (
-                        <div className="mt-1 mb-2 pb-2.5 pt-1 px-2 sm:px-3 space-y-2.5 bg-slate-50/50 dark:bg-zinc-900/30 rounded border border-slate-100 dark:border-zinc-800/60">
+                        <div className="pt-2 pb-1.5 px-1 sm:px-2 space-y-2 border-t border-slate-100 dark:border-zinc-800/60 mt-1">
                           {!hasChanges ? (
-                            <div className="py-1.5 text-xs text-slate-400 dark:text-zinc-500 italic">
+                            <div className="py-1 text-xs text-slate-400 dark:text-zinc-500 italic">
                               No task mutations recorded in this revision.
                             </div>
                           ) : (
-                            <div className="space-y-2.5 pt-1">
-                              {/* Modified Tasks in this Revision */}
+                            <div className="space-y-2.5 pt-0.5">
+                              {/* Modified Tasks in this Revision - Containerless */}
                               {revModified.length > 0 && (
-                                <div className="space-y-2">
+                                <div className="space-y-1.5">
                                   <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
                                     Modified in v{versionNumber} ({revModified.length})
                                   </span>
-                                  {revModified.map((mod) => (
-                                    <div key={mod.task.id} className="space-y-2 p-2 rounded bg-white dark:bg-zinc-900/80 border border-slate-200/60 dark:border-zinc-800/60 text-xs">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="font-bold text-slate-900 dark:text-zinc-100 truncate">
-                                          {mod.task.title || "Untitled Task"}
-                                        </span>
-                                        <span className="text-[9px] font-mono text-slate-400">
-                                          ID: {mod.task.id.slice(0, 8)}
-                                        </span>
+                                  <div className="divide-y divide-slate-100 dark:divide-zinc-800/60 border-y border-slate-100 dark:border-zinc-800/60">
+                                    {revModified.map((mod) => (
+                                      <div key={mod.task.id} className="py-2 space-y-1.5 text-xs">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="font-bold text-slate-900 dark:text-zinc-100 truncate">
+                                            {mod.task.title || "Untitled Task"}
+                                          </span>
+                                          <span className="text-[9px] font-mono text-slate-400">
+                                            ID: {mod.task.id.slice(0, 8)}
+                                          </span>
+                                        </div>
+
+                                        {/* Field Diffs */}
+                                        {mod.titleChanged && (
+                                          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Title:</span>
+                                            <span className="text-red-600 dark:text-red-400 line-through">{mod.oldTask.title}</span>
+                                            <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mod.task.title}</span>
+                                          </div>
+                                        )}
+
+                                        {mod.descriptionChanged && (
+                                          <div className="flex items-start gap-1.5 flex-wrap text-xs">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Desc:</span>
+                                            <span className="text-red-600 dark:text-red-400 line-through">{mod.oldTask.description || "(Empty)"}</span>
+                                            <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mod.task.description || "(Empty)"}</span>
+                                          </div>
+                                        )}
+
+                                        {mod.statusChanged && (
+                                          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Status:</span>
+                                            <span className="text-red-600 dark:text-red-400 line-through">{mod.oldTask.status}</span>
+                                            <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mod.task.status}</span>
+                                          </div>
+                                        )}
+
+                                        {mod.codeChanged && (
+                                          <div className="mt-1">
+                                            <SideBySideDiff
+                                              oldValue={mod.oldCode}
+                                              newValue={mod.newCode}
+                                              oldTitle={`v${versionNumber - 1} (Before)`}
+                                              newTitle={`v${versionNumber} (After)`}
+                                              maxHeight="220px"
+                                              borderless={true}
+                                            />
+                                          </div>
+                                        )}
                                       </div>
-
-                                      {/* Field Diffs */}
-                                      {mod.titleChanged && (
-                                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                                          <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Title:</span>
-                                          <span className="text-red-600 line-through">{mod.oldTask.title}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 font-semibold">{mod.task.title}</span>
-                                        </div>
-                                      )}
-
-                                      {mod.descriptionChanged && (
-                                        <div className="flex items-start gap-1.5 flex-wrap text-xs">
-                                          <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Desc:</span>
-                                          <span className="text-red-600 line-through">{mod.oldTask.description || "(Empty)"}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 font-semibold">{mod.task.description || "(Empty)"}</span>
-                                        </div>
-                                      )}
-
-                                      {mod.statusChanged && (
-                                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                                          <span className="text-[10px] uppercase font-bold text-slate-400 sm:w-20">Status:</span>
-                                          <span className="text-red-600 line-through">{mod.oldTask.status}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 font-semibold">{mod.task.status}</span>
-                                        </div>
-                                      )}
-
-                                      {mod.codeChanged && (
-                                        <div className="mt-1">
-                                          <SideBySideDiff
-                                            oldValue={mod.oldCode}
-                                            newValue={mod.newCode}
-                                            oldTitle={`v${versionNumber - 1} (Previous)`}
-                                            newTitle={`v${versionNumber} (Current)`}
-                                            maxHeight="220px"
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
+                                    ))}
+                                  </div>
                                 </div>
                               )}
 
-                              {/* Added in this Revision */}
+                              {/* Added in this Revision - Containerless */}
                               {revAdded.length > 0 && (
-                                <div className="space-y-1">
+                                <div className="space-y-1 pt-1">
                                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
                                     Added in v{versionNumber} (+{revAdded.length})
                                   </span>
-                                  {revAdded.map((t: any) => (
-                                    <div key={t.id} className="p-2 rounded bg-white dark:bg-zinc-900/80 border border-emerald-500/20 text-xs flex items-center justify-between">
-                                      <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate">{t.title}</span>
-                                      <span className="text-[9px] font-bold text-emerald-600 uppercase">New Task</span>
-                                    </div>
-                                  ))}
+                                  <div className="divide-y divide-emerald-100 dark:divide-emerald-950/40 border-y border-emerald-100 dark:border-emerald-950/40">
+                                    {revAdded.map((t: any) => (
+                                      <div key={t.id} className="py-1.5 px-0.5 text-xs flex items-center justify-between">
+                                        <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate">{t.title}</span>
+                                        <span className="text-[9px] font-bold text-emerald-600 uppercase">New Task</span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
 
-                              {/* Removed in this Revision */}
+                              {/* Removed in this Revision - Containerless */}
                               {revRemoved.length > 0 && (
-                                <div className="space-y-1">
+                                <div className="space-y-1 pt-1">
                                   <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
                                     Removed in v{versionNumber} (-{revRemoved.length})
                                   </span>
-                                  {revRemoved.map((t: any) => (
-                                    <div key={t.id} className="p-2 rounded bg-white dark:bg-zinc-900/80 border border-rose-500/20 text-xs flex items-center justify-between">
-                                      <span className="font-semibold text-slate-800 dark:text-zinc-200 line-through truncate">{t.title}</span>
-                                      <span className="text-[9px] font-bold text-rose-600 uppercase">Deleted</span>
-                                    </div>
-                                  ))}
+                                  <div className="divide-y divide-rose-100 dark:divide-rose-950/40 border-y border-rose-100 dark:border-rose-950/40">
+                                    {revRemoved.map((t: any) => (
+                                      <div key={t.id} className="py-1.5 px-0.5 text-xs flex items-center justify-between">
+                                        <span className="font-semibold text-slate-800 dark:text-zinc-200 line-through truncate">{t.title}</span>
+                                        <span className="text-[9px] font-bold text-rose-600 uppercase">Deleted</span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -983,7 +990,7 @@ export function VersionDetailView({
                                         oldTitle="Old (Before)"
                                         newTitle="New (After)"
                                         maxHeight="320px"
-                                        borderless={false}
+                                        borderless={true}
                                       />
                                     </div>
                                   )}

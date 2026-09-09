@@ -24,7 +24,7 @@ export const SideBySideDiff = memo(function SideBySideDiff({
   isDark,
   className,
   maxHeight = "340px",
-  borderless = false,
+  borderless = true,
 }: SideBySideDiffProps) {
   // Persisted view preference across diffs
   const [splitView, setSplitView] = useLocalStorage<boolean>(
@@ -189,11 +189,11 @@ export const SideBySideDiff = memo(function SideBySideDiff({
   return (
     <div
       className={cn(
-        "overflow-hidden flex flex-col select-text diff-viewer-compact",
+        "overflow-hidden flex flex-col select-text diff-viewer-compact w-full",
         splitView ? "is-split-view" : "is-inline-view",
         borderless
-          ? "border-t border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-[#09090b]"
-          : "rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#09090b] shadow-xs",
+          ? "border-y border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-[#09090b]"
+          : "rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#09090b]",
         className
       )}
     >
