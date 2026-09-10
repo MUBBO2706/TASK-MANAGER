@@ -806,9 +806,13 @@ app.get("/api/version-backup-detail", checkApiKey, async (req, res) => {
       afterTasks.forEach((afterTask: any) => {
          const beforeTask = beforeTasks.find((t: any) => t.id === afterTask.id);
          if (beforeTask) {
-             const oldCode = (beforeTask.type === "edge_function" ? beforeTask.edgeFiles?.[0]?.code : beforeTask.sql) || "";
-             const newCode = (afterTask.type === "edge_function" ? afterTask.edgeFiles?.[0]?.code : afterTask.sql) || "";
-             if (oldCode.trim() !== newCode.trim()) {
+             const oldCode = (beforeTask.type === "edge_function" ? (beforeTask.functionCode || beforeTask.edgeFiles?.[0]?.code) : beforeTask.sql) || "";
+             const newCode = (afterTask.type === "edge_function" ? (afterTask.functionCode || afterTask.edgeFiles?.[0]?.code) : afterTask.sql) || "";
+             const oldFilesStr = JSON.stringify(beforeTask.edgeFiles || []);
+             const newFilesStr = JSON.stringify(afterTask.edgeFiles || []);
+             const oldSecretsStr = JSON.stringify(beforeTask.edgeSecrets || []);
+             const newSecretsStr = JSON.stringify(afterTask.edgeSecrets || []);
+             if (oldCode.trim() !== newCode.trim() || oldFilesStr !== newFilesStr || oldSecretsStr !== newSecretsStr) {
                  modifiedCodeMap[afterTask.id] = true;
              }
          }
@@ -854,28 +858,41 @@ app.get("/api/version-task-state", checkApiKey, async (req, res) => {
       return res.status(400).json({ error: "taskId is required" });
     }
 
-    const promises = [];
-    if (versionIdBefore) {
-      promises.push(supabase.rpc('get_version_task_state', { version_id: versionIdBefore, target_task_id: taskId, is_before: true }).then(r => ({ type: 'before', ...r })));
-    }
-    if (versionIdAfter) {
-      promises.push(supabase.rpc('get_version_task_state', { version_id: versionIdAfter, target_task_id: taskId, is_before: false }).then(r => ({ type: 'after', ...r })));
-    }
+    const fetchSingleTaskState = async (versionId: any, isBefore: boolean) => {
+      if (!versionId) return null;
+      try {
+        const r = await supabase.rpc('get_version_task_state', { 
+          version_id: versionId, 
+          target_task_id: taskId, 
+          is_before: isBefore 
+        });
+        if (!r.error && r.data) {
+          return r.data;
+        }
+      } catch (_) {}
 
-    const results = await Promise.all(promises);
+      // Fallback: fetch state directly from version_backups row
+      try {
+        const fieldName = isBefore ? 'state_before' : 'state_after';
+        const { data, error } = await supabase
+          .from('version_backups')
+          .select(fieldName)
+          .eq('id', versionId)
+          .single();
+        if (!error && data && data[fieldName]?.tasks) {
+          const matched = data[fieldName].tasks.find((t: any) => t.id === taskId);
+          return matched || null;
+        }
+      } catch (_) {}
+      return null;
+    };
 
-    const responseData: any = { stateBefore: null, stateAfter: null };
-    for (const r of results) {
-       if (r.error) {
-          console.warn(`Failed fetching ${r.type} state for task:`, JSON.stringify(r.error, null, 2));
-       } else if (r.type === 'before') {
-          responseData.stateBefore = r.data;
-       } else if (r.type === 'after') {
-          responseData.stateAfter = r.data;
-       }
-    }
+    const [stateBefore, stateAfter] = await Promise.all([
+      fetchSingleTaskState(versionIdBefore, true),
+      fetchSingleTaskState(versionIdAfter, false)
+    ]);
 
-    res.json(responseData);
+    res.json({ stateBefore, stateAfter });
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to fetch version task state:", errDetails);

@@ -3,5 +3,6 @@ export { VersionDetailView, getActionBadgeConfig } from "./VersionDetailView";
 export { 
   default as VersionControlSkeleton,
   VersionTimelineSkeleton, 
-  VersionDetailSkeleton 
+  VersionDetailSkeleton,
+  VersionEmptyStateSkeleton
 } from "./VersionControlSkeleton";

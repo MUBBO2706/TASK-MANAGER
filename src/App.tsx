@@ -520,33 +520,48 @@ export default function App() {
 
     if (typeof stateBeforeOrApiCall !== 'function' && ((stateBefore.tasks && stateBefore.tasks.length > 0) || (stateAfter.tasks && stateAfter.tasks.length > 0))) {
       try {
-        const contentResp = await fetch(`/api/content?api_key=${API_KEY_FALLBACK}`);
-        if (contentResp.ok) {
-          const fullTasks = await contentResp.json();
-          const fullTasksMap = new Map(fullTasks.map((t: any) => [t.id, t]));
-          
-          const enrich = (state: VersionBackupData) => {
-            if (!state || !state.tasks) return state;
-            return {
-              ...state,
-              tasks: state.tasks.map((task) => {
-                const fullTask = fullTasksMap.get(task.id) as any;
-                if (fullTask) {
+        const needsEnrichment = [
+          ...(stateBefore.tasks || []),
+          ...(stateAfter.tasks || [])
+        ].some(t => !t.isContentFetched && !t.sql && !t.functionCode && (!t.edgeFiles || t.edgeFiles.length === 0));
+
+        if (needsEnrichment) {
+          const contentResp = await fetch(`/api/content?api_key=${API_KEY_FALLBACK}`);
+          if (contentResp.ok) {
+            const fullTasks = await contentResp.json();
+            const fullTasksMap = new Map(fullTasks.map((t: any) => [t.id, t]));
+            
+            const enrich = (state: VersionBackupData, otherState: VersionBackupData) => {
+              if (!state || !state.tasks) return state;
+              const otherTasksMap = new Map((otherState?.tasks || []).map(t => [t.id, t]));
+
+              return {
+                ...state,
+                tasks: state.tasks.map((task) => {
+                  const otherTask = otherTasksMap.get(task.id);
+                  const fullTask = fullTasksMap.get(task.id) as any;
+                  if (!fullTask) return task;
+
+                  // Never overwrite fields if they were modified between stateBefore and stateAfter or if already fetched/set
+                  const wasSqlChanged = otherTask && otherTask.sql !== task.sql;
+                  const wasFunctionCodeChanged = otherTask && otherTask.functionCode !== task.functionCode;
+                  const wasEdgeFilesChanged = otherTask && JSON.stringify(otherTask.edgeFiles || []) !== JSON.stringify(task.edgeFiles || []);
+                  const wasEdgeSecretsChanged = otherTask && JSON.stringify(otherTask.edgeSecrets || []) !== JSON.stringify(task.edgeSecrets || []);
+
                   return {
                     ...task,
-                    sql: fullTask.sql || '',
-                    functionCode: fullTask.functionCode || '',
-                    edgeFiles: fullTask.edgeFiles || [],
-                    edgeSecrets: fullTask.edgeSecrets || []
+                    sql: (wasSqlChanged || task.isContentFetched || task.sql) ? (task.sql ?? '') : (fullTask.sql || ''),
+                    functionCode: (wasFunctionCodeChanged || task.isContentFetched || task.functionCode) ? (task.functionCode ?? '') : (fullTask.functionCode || ''),
+                    edgeFiles: (wasEdgeFilesChanged || task.isContentFetched || (task.edgeFiles && task.edgeFiles.length > 0)) ? (task.edgeFiles ?? []) : (fullTask.edgeFiles || []),
+                    edgeSecrets: (wasEdgeSecretsChanged || task.isContentFetched || (task.edgeSecrets && task.edgeSecrets.length > 0)) ? (task.edgeSecrets ?? []) : (fullTask.edgeSecrets || [])
                   };
-                }
-                return task;
-              })
+                })
+              };
             };
-          };
-          
-          finalStateBefore = enrich(stateBefore);
-          finalStateAfter = enrich(stateAfter);
+            
+            finalStateBefore = enrich(stateBefore, stateAfter);
+            finalStateAfter = enrich(stateAfter, stateBefore);
+          }
         }
       } catch (err) {
         console.warn("Failed to enrich backup with full task contents:", err);
@@ -1924,12 +1939,12 @@ export default function App() {
             description = `Updated SQL in "${updatedTask.title || "Untitled"}"`;
           } else if (
             baselineTask.functionCode !== updatedTask.functionCode || 
-            JSON.stringify(baselineTask.edgeFiles) !== JSON.stringify(updatedTask.edgeFiles)
+            JSON.stringify(baselineTask.edgeFiles || []) !== JSON.stringify(updatedTask.edgeFiles || [])
           ) {
             description = `Updated code in "${updatedTask.title || "Untitled"}"`;
           } else if (baselineTask.description !== updatedTask.description) {
             description = `Updated description of "${updatedTask.title || "Untitled"}"`;
-          } else if (JSON.stringify(baselineTask.edgeSecrets) !== JSON.stringify(updatedTask.edgeSecrets)) {
+          } else if (JSON.stringify(baselineTask.edgeSecrets || []) !== JSON.stringify(updatedTask.edgeSecrets || [])) {
             description = `Updated secrets in "${updatedTask.title || "Untitled"}"`;
           }
 
@@ -3069,6 +3084,7 @@ export default function App() {
         <VersionControlSkeleton
           sidebarWidth={versionSidebarWidth}
           onSidebarWidthChange={setVersionSidebarWidth}
+          selectedVersionId={searchParams.get("versionId")}
           onClose={() => {
             setShowVersionHistory(false);
             setSearchParams(prev => {

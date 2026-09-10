@@ -39,7 +39,6 @@ import { WordDiffView } from "./WordDiffView";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
 import { ConsolidatedBackupGroup } from "./consolidation";
-import { VersionDetailSkeleton } from "./VersionControlSkeleton";
 import { DiffCodeSkeleton, CodeBlockSkeleton } from "../DiffViewerSkeleton";
 
 interface VersionDetailViewProps {
@@ -396,13 +395,16 @@ export function VersionDetailView({
     setExpandedAddedId(null);
     setExpandedRemovedId(null);
     setExpandedTaskId(null);
-  }, [version?.id]);
-
-  if (detailLoading) {
-    return <VersionDetailSkeleton />;
-  }
+  }, [version?.id, detailLoading]);
 
   if (!version) {
+    if (detailLoading) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center h-full bg-white dark:bg-black">
+          <Loader size={28} className="animate-spin text-slate-400 dark:text-zinc-500" />
+        </div>
+      );
+    }
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-slate-50/50 dark:bg-black/50 p-6 sm:p-8 text-center">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-600 mb-4 border border-slate-200 dark:border-zinc-800">
@@ -543,44 +545,59 @@ export function VersionDetailView({
 
             {/* Desktop Undo and Redo Action Buttons */}
             <div className="hidden md:flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setConfirmRestore("undo")}
-                disabled={version.isUndone || isRestoring}
-                className={cn(
-                  "px-2.5 py-1 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
-                  version.isUndone
-                    ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
-                    : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white"
-                )}
-              >
-                <Undo2 size={13} className="stroke-[2.5]" />
-                <span>
-                  {version.action === "delete_project" ? "Resurrect" : "Undo"}
-                </span>
-              </button>
+              {detailLoading ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="h-7 w-16 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                  <div className="h-7 w-14 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRestore("undo")}
+                    disabled={version.isUndone || isRestoring}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
+                      version.isUndone
+                        ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
+                        : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white"
+                    )}
+                  >
+                    <Undo2 size={13} className="stroke-[2.5]" />
+                    <span>
+                      {version.action === "delete_project" ? "Resurrect" : "Undo"}
+                    </span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setConfirmRestore("redo")}
-                disabled={!version.isUndone || isRestoring}
-                className={cn(
-                  "px-2.5 py-1 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
-                  !version.isUndone
-                    ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
-                    : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white"
-                )}
-              >
-                <Redo2 size={13} className="stroke-[2.5]" />
-                <span>Redo</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRestore("redo")}
+                    disabled={!version.isUndone || isRestoring}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
+                      !version.isUndone
+                        ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
+                        : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white"
+                    )}
+                  >
+                    <Redo2 size={13} className="stroke-[2.5]" />
+                    <span>Redo</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Specifications Content - Container-less Architecture */}
-      <div className="flex-1 px-3.5 sm:px-5 pt-3.5 sm:pt-5 pb-0 space-y-3 sm:space-y-4 overflow-y-auto">
+      {/* Main Content: Rotating Loader if detailLoading, otherwise Specifications Content */}
+      {detailLoading ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <Loader size={28} className="animate-spin text-slate-400 dark:text-zinc-500" />
+        </div>
+      ) : (
+        /* Main Specifications Content - Container-less Architecture */
+        <div className="flex-1 px-3.5 sm:px-5 pt-3.5 sm:pt-5 pb-0 space-y-3 sm:space-y-4 overflow-y-auto">
         {/* Scope & Targets inline bar - Containerless */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pb-3 border-b border-slate-100 dark:border-zinc-800/60">
           <div className="flex items-center gap-2 min-w-0">
@@ -621,11 +638,11 @@ export function VersionDetailView({
 
         {/* Consolidated Granular Sequence - Containerless & Collapsible with Chevron on Right */}
         {versionGroup && versionGroup.length > 1 && (
-          <div className="pb-3 border-b border-slate-100 dark:border-zinc-800/60">
+          <div className={cn("border-b border-slate-100 dark:border-zinc-800/60", isTimelineExpanded ? "pb-0" : "pb-3")}>
             {/* Header with expand/collapse chevron on the RIGHT */}
             <div 
               onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
-              className="flex items-center justify-between gap-2 cursor-pointer select-none group/toggle py-1 -my-1"
+              className="flex items-center justify-between gap-2 cursor-pointer select-none group/toggle py-1"
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 <Layers size={13} className="text-blue-600 dark:text-blue-400 shrink-0" />
@@ -649,7 +666,7 @@ export function VersionDetailView({
 
             {/* Collapsible Revisions List (Without timeline line/dots, with per-version expansion) */}
             {isTimelineExpanded && (
-              <div className="pt-2.5 space-y-1.5 divide-y divide-slate-100 dark:divide-zinc-800/60">
+              <div className="pt-2 space-y-1.5 divide-y divide-slate-100 dark:divide-zinc-800/60">
                 {granularRevisionDiffs.map(({ revision, index, versionNumber, addedTasks: revAdded, removedTasks: revRemoved, modifiedTaskDiffs: revModified, hasChanges }) => {
                   const isRevExpanded = expandedRevisionIds.has(revision.id);
                   const isLatest = index === 0;
@@ -725,22 +742,22 @@ export function VersionDetailView({
 
                       {/* Expanded Revision Diff - Containerless */}
                       {isRevExpanded && (
-                        <div className="pt-2 pb-1.5 px-1 sm:px-2 space-y-2 mt-0.5">
+                        <div className="pt-1.5 pb-0 px-1 sm:px-2 space-y-2 mt-0.5">
                           {!hasChanges ? (
                             <div className="py-1 text-xs text-slate-400 dark:text-zinc-500 italic">
                               No task mutations recorded in this revision.
                             </div>
                           ) : (
-                            <div className="space-y-2.5 pt-0.5">
+                            <div className="space-y-2 pt-0.5 pb-0">
                               {/* Modified Tasks in this Revision - Containerless */}
                               {revModified.length > 0 && (
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 pb-0">
                                   <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
                                     Modified in v{versionNumber} ({revModified.length})
                                   </span>
-                                  <div className="space-y-1.5">
+                                  <div className="space-y-1.5 pb-0">
                                     {revModified.map((mod) => (
-                                      <div key={mod.task.id} className="py-1.5 space-y-1 text-xs">
+                                      <div key={mod.task.id} className="pt-1 pb-0 space-y-1 text-xs border-b border-slate-100/60 dark:border-zinc-800/40 last:border-b-0 last:pb-0">
                                         <div className="flex items-center justify-between gap-2">
                                           <span className="font-bold text-slate-900 dark:text-zinc-100 truncate">
                                             {mod.task.title || "Untitled Task"}
@@ -778,7 +795,7 @@ export function VersionDetailView({
                                         )}
 
                                         {mod.codeChanged && (
-                                          <div className="mt-1">
+                                          <div className="mt-1.5 mb-0 -mx-3.5 sm:-mx-5">
                                             <SideBySideDiff
                                               oldValue={mod.oldCode}
                                               newValue={mod.newCode}
@@ -1014,16 +1031,20 @@ export function VersionDetailView({
                       </div>
 
                       <div className="divide-y divide-slate-100 dark:divide-zinc-800/70">
-                        {modifiedTaskDiffs.map(({ task, oldTask, oldCode, newCode, codeChanged, titleChanged, statusChanged, descriptionChanged, orderChanged }) => {
+                        {modifiedTaskDiffs.map(({ task, oldTask, oldCode, newCode, codeChanged, titleChanged, statusChanged, descriptionChanged, orderChanged }, idx) => {
                           const isDiffExpanded = expandedDiffId === task.id;
                           const isEdge = task.type === "edge_function";
+                          const isLast = idx === modifiedTaskDiffs.length - 1;
 
                           return (
                             <div key={task.id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
                               {/* Task Row Header */}
                               <div
                                 onClick={() => handleExpandTaskForDiff(task.id, expandedDiffId, setExpandedDiffId, oldTask, task)}
-                                className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer"
+                                className={cn(
+                                  "px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer transition-colors",
+                                  isDiffExpanded ? "pt-2 sm:pt-2.5 pb-1" : "py-2 sm:py-2.5"
+                                )}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   {isEdge ? (
@@ -1057,13 +1078,15 @@ export function VersionDetailView({
 
                               {/* Changes Body & Side-by-Side Diff - Container-less Flush View */}
                               {isDiffExpanded && (
-                                <div className="pb-1 pt-1 px-1 sm:px-2 space-y-2">
+                                <div className={cn("pt-0.5 space-y-1.5", isLast ? "pb-0" : "pb-1")}>
                                   {loadingTaskId === task.id ? (
-                                    <DiffCodeSkeleton />
+                                    <div className="px-1 sm:px-2">
+                                      <DiffCodeSkeleton />
+                                    </div>
                                   ) : (
                                     <>
                                       {/* Containerless responsive layout for metadata changes (old vs new) */}
-                                      <div className="text-xs space-y-2 py-1">
+                                      <div className="text-xs space-y-1.5 py-0.5 px-1 sm:px-2">
                                         {titleChanged && (
                                           <WordDiffView
                                             label="Title"
@@ -1103,7 +1126,7 @@ export function VersionDetailView({
 
                                       {/* Side-by-side Diff Component is ONLY shown if code actually changed */}
                                       {codeChanged && (
-                                        <div className="mt-2">
+                                        <div className="-mx-3.5 sm:-mx-5 mt-1.5 mb-0">
                                           <SideBySideDiff
                                             oldValue={oldCode}
                                             newValue={newCode}
@@ -1141,16 +1164,20 @@ export function VersionDetailView({
                       </div>
 
                       <div className="divide-y divide-emerald-100 dark:divide-emerald-950/50">
-                        {addedTasks.map((task: any) => {
+                        {addedTasks.map((task: any, idx: number) => {
                           const code = task.sql || task.functionCode || task.function_code || "";
                           const isEdge = task.type === "edge_function";
                           const isExpanded = expandedAddedId === task.id;
+                          const isLast = idx === addedTasks.length - 1;
 
                           return (
                             <div key={task.id} className="transition-colors hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10">
                               <div
                                 onClick={() => handleExpandTaskForDiff(task.id, expandedAddedId, setExpandedAddedId, undefined, task)}
-                                className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer"
+                                className={cn(
+                                  "px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer transition-colors",
+                                  isExpanded ? "pt-2 sm:pt-2.5 pb-1" : "py-2 sm:py-2.5"
+                                )}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   {isEdge ? (
@@ -1177,17 +1204,22 @@ export function VersionDetailView({
                               </div>
 
                               {isExpanded && (
-                                <div className="pb-1 pt-1 px-1 sm:px-2">
+                                <div className={cn("pt-0.5", isLast ? "pb-0" : "pb-1")}>
                                   {loadingTaskId === task.id ? (
-                                    <DiffCodeSkeleton />
+                                    <div className="px-1 sm:px-2">
+                                      <DiffCodeSkeleton />
+                                    </div>
                                   ) : (
-                                    <SideBySideDiff
-                                      oldValue=""
-                                      newValue={code}
-                                      oldTitle="None (Before)"
-                                      newTitle="Created Code"
-                                      maxHeight="280px"
-                                    />
+                                    <div className="-mx-3.5 sm:-mx-5 mb-0">
+                                      <SideBySideDiff
+                                        oldValue=""
+                                        newValue={code}
+                                        oldTitle="None (Before)"
+                                        newTitle="Created Code"
+                                        maxHeight="280px"
+                                        borderless={true}
+                                      />
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -1214,16 +1246,20 @@ export function VersionDetailView({
                       </div>
 
                       <div className="divide-y divide-rose-100 dark:divide-rose-950/50">
-                        {removedTasks.map((task: any) => {
+                        {removedTasks.map((task: any, idx: number) => {
                           const code = task.sql || task.functionCode || task.function_code || "";
                           const isEdge = task.type === "edge_function";
                           const isExpanded = expandedRemovedId === task.id;
+                          const isLast = idx === removedTasks.length - 1;
 
                           return (
                             <div key={task.id} className="transition-colors hover:bg-rose-50/30 dark:hover:bg-rose-950/10">
                               <div
                                 onClick={() => handleExpandTaskForDiff(task.id, expandedRemovedId, setExpandedRemovedId, task, undefined)}
-                                className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer"
+                                className={cn(
+                                  "px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer transition-colors",
+                                  isExpanded ? "pt-2 sm:pt-2.5 pb-1" : "py-2 sm:py-2.5"
+                                )}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   {isEdge ? (
@@ -1250,17 +1286,22 @@ export function VersionDetailView({
                               </div>
 
                               {isExpanded && (
-                                <div className="pb-1 pt-1 px-1 sm:px-2">
+                                <div className={cn("pt-0.5", isLast ? "pb-0" : "pb-1")}>
                                   {loadingTaskId === task.id ? (
-                                    <DiffCodeSkeleton />
+                                    <div className="px-1 sm:px-2">
+                                      <DiffCodeSkeleton />
+                                    </div>
                                   ) : (
-                                    <SideBySideDiff
-                                      oldValue={code}
-                                      newValue=""
-                                      oldTitle="Deleted Code"
-                                      newTitle="None (After)"
-                                      maxHeight="280px"
-                                    />
+                                    <div className="-mx-3.5 sm:-mx-5 mb-0">
+                                      <SideBySideDiff
+                                        oldValue={code}
+                                        newValue=""
+                                        oldTitle="Deleted Code"
+                                        newTitle="None (After)"
+                                        maxHeight="280px"
+                                        borderless={true}
+                                      />
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -1317,17 +1358,21 @@ export function VersionDetailView({
                     {taskSearch ? "No tasks matching your search query." : "No tasks in this snapshot."}
                   </div>
                 ) : (
-                  filteredTasks.map((task: any) => {
+                  filteredTasks.map((task: any, taskIdx: number) => {
                     const isExpanded = expandedTaskId === task.id;
                     const isEdge = task.type === "edge_function";
                     const isAdded = addedTasks.some((t) => t.id === task.id);
                     const modifiedDiff = modifiedTaskDiffs.find((d) => d.task.id === task.id);
+                    const isLast = taskIdx === filteredTasks.length - 1;
 
                     return (
                       <div key={task.id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
                         <div
                           onClick={() => handleExpandTaskForDiff(task.id, expandedTaskId, setExpandedTaskId, undefined, task)}
-                          className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-3 cursor-pointer"
+                          className={cn(
+                            "px-1 sm:px-2 flex items-center justify-between gap-3 cursor-pointer transition-colors",
+                            isExpanded ? "pt-2 sm:pt-2.5 pb-1" : "py-2 sm:py-2.5"
+                          )}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             {isEdge ? (
@@ -1380,8 +1425,8 @@ export function VersionDetailView({
 
                         {/* Expandable Task Code Inspector & Diff Shortcut - Container-less Flush */}
                         {isExpanded && (
-                          <div className="pb-3 pt-1 px-1 sm:px-2 space-y-2">
-                            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 dark:text-zinc-500">
+                          <div className={cn("pt-0.5 space-y-1.5", isLast ? "pb-0" : "pb-1")}>
+                            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 dark:text-zinc-500 px-1 sm:px-2">
                               <span className="uppercase">
                                 {isEdge ? "Edge Function Payload" : "SQL Script Content"}
                               </span>
@@ -1389,29 +1434,36 @@ export function VersionDetailView({
                             </div>
 
                             {loadingTaskId === task.id ? (
-                              modifiedDiff || isAdded ? (
-                                <DiffCodeSkeleton />
-                              ) : (
-                                <CodeBlockSkeleton />
-                              )
+                              <div className="px-1 sm:px-2">
+                                {modifiedDiff || isAdded ? (
+                                  <DiffCodeSkeleton />
+                                ) : (
+                                  <CodeBlockSkeleton />
+                                )}
+                              </div>
                             ) : modifiedDiff ? (
                               <div>
-                                <div className="text-[10.5px] font-semibold text-sky-600 dark:text-sky-400 mb-1 flex items-center gap-1">
+                                <div className="text-[10.5px] font-semibold text-sky-600 dark:text-sky-400 mb-1 flex items-center gap-1 px-1 sm:px-2">
                                   <DiffIcon size={12} />
                                   <span>Modified in this snapshot (Side-by-side Diff):</span>
                                 </div>
-                                <SideBySideDiff
-                                  oldValue={modifiedDiff.oldCode}
-                                  newValue={modifiedDiff.newCode}
-                                  oldTitle="Old (Before)"
-                                  newTitle="New (After)"
-                                  maxHeight="250px"
-                                />
+                                <div className="-mx-3.5 sm:-mx-5 mb-0">
+                                  <SideBySideDiff
+                                    oldValue={modifiedDiff.oldCode}
+                                    newValue={modifiedDiff.newCode}
+                                    oldTitle="Old (Before)"
+                                    newTitle="New (After)"
+                                    maxHeight="250px"
+                                    borderless={true}
+                                  />
+                                </div>
                               </div>
                             ) : (
-                              <pre className="text-[11px] font-mono p-2.5 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 max-h-48 overflow-y-auto whitespace-pre-wrap select-text">
-                                {task.sql || task.functionCode || task.function_code || "-- (No script content recorded)"}
-                              </pre>
+                              <div className="px-1 sm:px-2">
+                                <pre className="text-[11px] font-mono p-2.5 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 max-h-48 overflow-y-auto whitespace-pre-wrap select-text">
+                                  {task.sql || task.functionCode || task.function_code || "-- (No script content recorded)"}
+                                </pre>
+                              </div>
                             )}
                           </div>
                         )}
@@ -1424,40 +1476,50 @@ export function VersionDetailView({
           )}
         </div>
       </div>
+      )}
 
       {/* Mobile Only Bottom Footer for Undo & Redo Controls (Desktop removed) */}
       <div className="md:hidden sticky bottom-0 left-0 right-0 z-20 px-3 py-2 border-t border-slate-200/80 dark:border-zinc-800/80 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-md flex items-center justify-end gap-2 shrink-0">
-        <button
-          type="button"
-          onClick={() => setConfirmRestore("undo")}
-          disabled={version.isUndone || isRestoring}
-          className={cn(
-            "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
-            version.isUndone
-              ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
-              : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white"
-          )}
-        >
-          <Undo2 size={13} className="stroke-[2.5]" />
-          <span>
-            {version.action === "delete_project" ? "Resurrect" : "Undo"}
-          </span>
-        </button>
+        {detailLoading ? (
+          <div className="flex items-center justify-end gap-2 w-full">
+            <div className="h-7.5 w-20 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+            <div className="h-7.5 w-16 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setConfirmRestore("undo")}
+              disabled={version.isUndone || isRestoring}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
+                version.isUndone
+                  ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
+                  : "bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white"
+              )}
+            >
+              <Undo2 size={13} className="stroke-[2.5]" />
+              <span>
+                {version.action === "delete_project" ? "Resurrect" : "Undo"}
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setConfirmRestore("redo")}
-          disabled={!version.isUndone || isRestoring}
-          className={cn(
-            "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
-            !version.isUndone
-              ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
-              : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white"
-          )}
-        >
-          <Redo2 size={13} className="stroke-[2.5]" />
-          <span>Redo</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setConfirmRestore("redo")}
+              disabled={!version.isUndone || isRestoring}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap",
+                !version.isUndone
+                  ? "bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200 dark:border-zinc-800"
+                  : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white"
+              )}
+            >
+              <Redo2 size={13} className="stroke-[2.5]" />
+              <span>Redo</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Confirmation Dialog - With Version Selection for Consolidated Sessions */}

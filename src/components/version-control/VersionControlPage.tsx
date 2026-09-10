@@ -449,6 +449,8 @@ export function VersionControlPage({
       <VersionControlSkeleton
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={setSidebarWidth}
+        selectedVersionId={selectedVersionId || urlVersionId}
+        isMobileDetail={showDetailMobile || Boolean(urlVersionId)}
         onClose={handleClosePage}
       />
     );
@@ -875,6 +877,12 @@ export function VersionControlPage({
                 }, { replace: true });
               } else {
                 setShowDetailMobile(false);
+                setSelectedVersionId(null);
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.delete("versionId");
+                  return next;
+                }, { replace: true });
               }
             }}
             onRestore={handleRestore}
