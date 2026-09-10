@@ -116,6 +116,17 @@ export function VersionControlPage({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Ensure versionControl param is present in URL when Version Control is open
+  useEffect(() => {
+    if (isOpen && searchParams.get("versionControl") !== "true") {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("versionControl", "true");
+        return next;
+      }, { replace: true });
+    }
+  }, [isOpen, searchParams, setSearchParams]);
+
   // Update selected version if URL param changes
   useEffect(() => {
     if (urlVersionId) {
@@ -407,6 +418,7 @@ export function VersionControlPage({
     setShowDetailMobile(true);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
+      next.set("versionControl", "true");
       next.set("versionId", version.id);
       return next;
     }, { replace: true });

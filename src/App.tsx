@@ -274,7 +274,7 @@ export default function App() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const isDiffParam = searchParams.get("diff") === "true";
-  const isVersionControlParam = searchParams.get("versionControl") === "true";
+  const isVersionControlParam = searchParams.get("versionControl") === "true" || Boolean(searchParams.get("versionId"));
 
   const [tasks, setTasks] = useState<SqlTask[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -1087,13 +1087,14 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedProjectId && projects.length > 0) {
+      const search = location.search;
       if (lastVisitedProjectId && projects.some(p => p.id === lastVisitedProjectId)) {
-        navigate(`/p/${lastVisitedProjectId}`, { replace: true });
+        navigate({ pathname: `/p/${lastVisitedProjectId}`, search }, { replace: true });
       } else {
-        navigate(`/p/${projects[0].id}`, { replace: true });
+        navigate({ pathname: `/p/${projects[0].id}`, search }, { replace: true });
       }
     }
-  }, [selectedProjectId, projects, navigate, lastVisitedProjectId]);
+  }, [selectedProjectId, projects, navigate, lastVisitedProjectId, location.search]);
 
   // DB Sync helper
   const syncToDB = async (newTasks: Partial<SqlTask>[], successMessage?: string, isManual = false) => {
@@ -1334,7 +1335,7 @@ export default function App() {
             setLoadedProjectIds(new Set(projectIdsToFetch));
 
             if (!urlProjectId && targetProjectId) {
-              navigate(`/p/${targetProjectId}`, { replace: true });
+              navigate({ pathname: `/p/${targetProjectId}`, search: location.search }, { replace: true });
             }
           }
 
@@ -3085,6 +3086,7 @@ export default function App() {
           sidebarWidth={versionSidebarWidth}
           onSidebarWidthChange={setVersionSidebarWidth}
           selectedVersionId={searchParams.get("versionId")}
+          isMobileDetail={Boolean(searchParams.get("versionId"))}
           onClose={() => {
             setShowVersionHistory(false);
             setSearchParams(prev => {
@@ -3764,7 +3766,7 @@ export default function App() {
                               const next = new URLSearchParams(prev);
                               next.set("versionControl", "true");
                               return next;
-                            });
+                            }, { replace: true });
                             setIsMoreMenuOpen(false);
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-900 transition-colors flex items-center gap-2 cursor-pointer"

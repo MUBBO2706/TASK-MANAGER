@@ -28,16 +28,16 @@ export function useHybridState<T extends string>(
     [key, setLsValue, setSearchParams]
   );
 
-  // Hydrate URL on mount if it's missing but we have it in LS
+  // Hydrate URL on mount if it's missing but we have it in LS and it's not the initial default
   useEffect(() => {
-    if (!urlValue && lsValue) {
+    if (!urlValue && lsValue && lsValue !== initialValue) {
       setSearchParams((prev) => {
         const newParams = new URLSearchParams(prev);
         newParams.set(key, lsValue);
         return newParams;
       }, { replace: true });
     }
-  }, [key, urlValue, lsValue, setSearchParams]);
+  }, [key, urlValue, lsValue, initialValue, setSearchParams]);
 
   return [activeValue, setValue];
 }
