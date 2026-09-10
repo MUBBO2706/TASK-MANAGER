@@ -30,8 +30,7 @@ import {
   Code2, 
   Diff as DiffIcon,
   Sparkles,
-  RefreshCw,
-  Loader2
+  RefreshCw
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Project, VersionBackup, SqlTask } from "../../types";
@@ -41,6 +40,7 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
 import { ConsolidatedBackupGroup } from "./consolidation";
 import { VersionDetailSkeleton } from "./VersionControlSkeleton";
+import { DiffCodeSkeleton, CodeBlockSkeleton } from "../DiffViewerSkeleton";
 
 interface VersionDetailViewProps {
   versionGroup?: VersionBackup[] | null;
@@ -1050,7 +1050,7 @@ export function VersionDetailView({
                                     ID: {task.id.slice(0, 8)}
                                   </span>
                                   {loadingTaskId === task.id ? (
-                                    <Loader2 size={14} className="animate-spin text-blue-500" />
+                                    <Loader size={14} className="animate-spin text-blue-500" />
                                   ) : isDiffExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </div>
                               </div>
@@ -1058,57 +1058,63 @@ export function VersionDetailView({
                               {/* Changes Body & Side-by-Side Diff - Container-less Flush View */}
                               {isDiffExpanded && (
                                 <div className="pb-1 pt-1 px-1 sm:px-2 space-y-2">
-                                  {/* Containerless responsive layout for metadata changes (old vs new) */}
-                                  <div className="text-xs space-y-2 py-1">
-                                    {titleChanged && (
-                                      <WordDiffView
-                                        label="Title"
-                                        oldText={oldTask.title || "Untitled"}
-                                        newText={task.title || "Untitled"}
-                                      />
-                                    )}
-                                    {statusChanged && (
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                        <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider sm:w-24">Status:</span>
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="text-red-600 dark:text-red-400 line-through truncate">{oldTask.status}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate">{task.status}</span>
-                                        </div>
+                                  {loadingTaskId === task.id ? (
+                                    <DiffCodeSkeleton />
+                                  ) : (
+                                    <>
+                                      {/* Containerless responsive layout for metadata changes (old vs new) */}
+                                      <div className="text-xs space-y-2 py-1">
+                                        {titleChanged && (
+                                          <WordDiffView
+                                            label="Title"
+                                            oldText={oldTask.title || "Untitled"}
+                                            newText={task.title || "Untitled"}
+                                          />
+                                        )}
+                                        {statusChanged && (
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider sm:w-24">Status:</span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <span className="text-red-600 dark:text-red-400 line-through truncate">{oldTask.status}</span>
+                                              <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate">{task.status}</span>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {descriptionChanged && (
+                                          <WordDiffView
+                                            label="Description"
+                                            oldText={oldTask.description || ""}
+                                            newText={task.description || ""}
+                                            isLongText={true}
+                                          />
+                                        )}
+                                        {orderChanged && (
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                            <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider sm:w-24">Order:</span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <span className="text-red-600 dark:text-red-400 line-through truncate">{oldTask.orderIndex ?? "None"}</span>
+                                              <ArrowRight size={10} className="text-slate-400 shrink-0" />
+                                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate">{task.orderIndex ?? "None"}</span>
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
-                                    )}
-                                    {descriptionChanged && (
-                                      <WordDiffView
-                                        label="Description"
-                                        oldText={oldTask.description || ""}
-                                        newText={task.description || ""}
-                                        isLongText={true}
-                                      />
-                                    )}
-                                    {orderChanged && (
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                        <span className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider sm:w-24">Order:</span>
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="text-red-600 dark:text-red-400 line-through truncate">{oldTask.orderIndex ?? "None"}</span>
-                                          <ArrowRight size={10} className="text-slate-400 shrink-0" />
-                                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate">{task.orderIndex ?? "None"}</span>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
 
-                                  {/* Side-by-side Diff Component is ONLY shown if code actually changed */}
-                                  {codeChanged && (
-                                    <div className="mt-2">
-                                      <SideBySideDiff
-                                        oldValue={oldCode}
-                                        newValue={newCode}
-                                        oldTitle="Old (Before)"
-                                        newTitle="New (After)"
-                                        maxHeight="360px"
-                                        borderless={true}
-                                      />
-                                    </div>
+                                      {/* Side-by-side Diff Component is ONLY shown if code actually changed */}
+                                      {codeChanged && (
+                                        <div className="mt-2">
+                                          <SideBySideDiff
+                                            oldValue={oldCode}
+                                            newValue={newCode}
+                                            oldTitle="Old (Before)"
+                                            newTitle="New (After)"
+                                            maxHeight="360px"
+                                            borderless={true}
+                                          />
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               )}
@@ -1165,20 +1171,24 @@ export function VersionDetailView({
                                     {task.status || "created"}
                                   </span>
                                   {loadingTaskId === task.id ? (
-                                    <Loader2 size={14} className="animate-spin text-emerald-500" />
+                                    <Loader size={14} className="animate-spin text-emerald-500" />
                                   ) : isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                 </div>
                               </div>
 
                               {isExpanded && (
                                 <div className="pb-1 pt-1 px-1 sm:px-2">
-                                  <SideBySideDiff
-                                    oldValue=""
-                                    newValue={code}
-                                    oldTitle="None (Before)"
-                                    newTitle="Created Code"
-                                    maxHeight="280px"
-                                  />
+                                  {loadingTaskId === task.id ? (
+                                    <DiffCodeSkeleton />
+                                  ) : (
+                                    <SideBySideDiff
+                                      oldValue=""
+                                      newValue={code}
+                                      oldTitle="None (Before)"
+                                      newTitle="Created Code"
+                                      maxHeight="280px"
+                                    />
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1234,20 +1244,24 @@ export function VersionDetailView({
                                     Removed
                                   </span>
                                   {loadingTaskId === task.id ? (
-                                    <Loader2 size={14} className="animate-spin text-rose-500" />
+                                    <Loader size={14} className="animate-spin text-rose-500" />
                                   ) : isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                 </div>
                               </div>
 
                               {isExpanded && (
                                 <div className="pb-1 pt-1 px-1 sm:px-2">
-                                  <SideBySideDiff
-                                    oldValue={code}
-                                    newValue=""
-                                    oldTitle="Deleted Code"
-                                    newTitle="None (After)"
-                                    maxHeight="280px"
-                                  />
+                                  {loadingTaskId === task.id ? (
+                                    <DiffCodeSkeleton />
+                                  ) : (
+                                    <SideBySideDiff
+                                      oldValue={code}
+                                      newValue=""
+                                      oldTitle="Deleted Code"
+                                      newTitle="None (After)"
+                                      maxHeight="280px"
+                                    />
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1355,7 +1369,7 @@ export function VersionDetailView({
                               {task.status || "pending"}
                             </span>
                             {loadingTaskId === task.id ? (
-                              <Loader2 size={13} className="animate-spin text-blue-500" />
+                              <Loader size={13} className="animate-spin text-blue-500" />
                             ) : isExpanded ? (
                               <ChevronUp size={13} className="text-slate-400" />
                             ) : (
@@ -1374,7 +1388,13 @@ export function VersionDetailView({
                               <span>ID: {task.id}</span>
                             </div>
 
-                            {modifiedDiff ? (
+                            {loadingTaskId === task.id ? (
+                              modifiedDiff || isAdded ? (
+                                <DiffCodeSkeleton />
+                              ) : (
+                                <CodeBlockSkeleton />
+                              )
+                            ) : modifiedDiff ? (
                               <div>
                                 <div className="text-[10.5px] font-semibold text-sky-600 dark:text-sky-400 mb-1 flex items-center gap-1">
                                   <DiffIcon size={12} />

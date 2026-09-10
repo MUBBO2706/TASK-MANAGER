@@ -22,7 +22,7 @@ import {
   Square,
   ListChecks,
   AlertTriangle,
-  Loader2
+  Loader
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Project, VersionBackup } from "../../types";
@@ -925,7 +925,7 @@ export function VersionControlPage({
               >
                 {isDeleting ? (
                   <>
-                    <Loader2 size={13} className="animate-spin" />
+                    <Loader size={13} className="animate-spin" />
                     <span>Deleting...</span>
                   </>
                 ) : (

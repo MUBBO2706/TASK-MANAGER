@@ -149,7 +149,7 @@ export const SideBySideDiff = memo(function SideBySideDiff({
         width: "min-content",
         minWidth: "unset",
         maxWidth: "unset",
-        textAlign: "right",
+        textAlign: "center",
         whiteSpace: "nowrap",
       },
       marker: {

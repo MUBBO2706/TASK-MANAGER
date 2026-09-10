@@ -129,7 +129,7 @@ html:not(.dark) .token.deleted {
   min-width: unset !important;
   max-width: unset !important;
   padding: 0 4px !important;
-  text-align: right !important;
+  text-align: center !important;
   font-size: 9.5px !important;
   white-space: nowrap !important;
   user-select: none !important;
@@ -139,7 +139,7 @@ html:not(.dark) .token.deleted {
   width: auto !important;
   min-width: unset !important;
   max-width: unset !important;
-  text-align: right !important;
+  text-align: center !important;
   padding: 0 !important;
   margin: 0 !important;
   opacity: 0.7 !important;

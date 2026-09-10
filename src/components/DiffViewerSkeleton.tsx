@@ -161,6 +161,25 @@ export const SelectedDiffEditorSkeleton: React.FC<{ hasMobileBack?: boolean }> =
   );
 };
 
+export const CodeBlockSkeleton: React.FC<{ rows?: number }> = ({ rows = 6 }) => {
+  const lineWidths = ["75%", "50%", "85%", "60%", "80%", "45%", "70%", "85%"];
+  return (
+    <div className="p-3.5 font-mono rounded-lg bg-slate-50 dark:bg-zinc-900/80 border border-slate-200/80 dark:border-zinc-800 space-y-2.5 overflow-hidden">
+      {Array.from({ length: rows }).map((_, idx) => (
+        <div key={idx} className="flex items-center gap-3 h-4">
+          <span className="w-5 text-[10px] text-slate-300 dark:text-zinc-700 text-center select-none shrink-0 font-mono">
+            {idx + 1}
+          </span>
+          <div
+            className="h-3 rounded bg-slate-200/80 dark:bg-zinc-800 animate-pulse"
+            style={{ width: lineWidths[idx % lineWidths.length] }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export const DiffCodeSkeleton: React.FC = () => {
   return (
     <div className="flex-1 p-4 font-mono overflow-hidden flex flex-row h-full w-full bg-white dark:bg-[#0a0a0a]">
@@ -168,7 +187,7 @@ export const DiffCodeSkeleton: React.FC = () => {
       <div className="flex-1 pr-3 border-r border-slate-200 dark:border-[#1a1a1a] space-y-3 overflow-hidden">
         {DIFF_CODE_LINES.map((line, idx) => (
           <div key={idx} className="flex items-center gap-2 h-4">
-            <span className="w-5 text-[10px] text-slate-300 dark:text-zinc-700 text-right select-none">
+            <span className="w-5 text-[10px] text-slate-300 dark:text-zinc-700 text-center select-none">
               {line.type !== "empty" ? idx + 1 : ""}
             </span>
             {line.leftWidth !== "0%" && (
@@ -193,7 +212,7 @@ export const DiffCodeSkeleton: React.FC = () => {
       <div className="flex-1 pl-3 space-y-3 overflow-hidden">
         {DIFF_CODE_LINES.map((line, idx) => (
           <div key={idx} className="flex items-center gap-2 h-4">
-            <span className="w-5 text-[10px] text-slate-300 dark:text-zinc-700 text-right select-none">
+            <span className="w-5 text-[10px] text-slate-300 dark:text-zinc-700 text-center select-none">
               {line.type !== "empty" ? idx + 1 : ""}
             </span>
             {line.rightWidth !== "0%" && (
