@@ -1433,24 +1433,33 @@ export default function App() {
             if (isMounted) {
               if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                 const b = payload.new as any;
+                const parseState = (val: any) => {
+                  if (!val) return null;
+                  if (typeof val === 'string') {
+                    try { return JSON.parse(val); } catch (_) { return null; }
+                  }
+                  return val;
+                };
                 const mappedBackup: VersionBackup = {
                   id: b.id,
-                  timestamp: b.created_at,
+                  timestamp: Number(b.created_at) || Date.now(),
                   action: b.action,
-                  description: b.description,
-                  isUndone: b.is_undone,
-                  prodProjectId: b.prod_project_id,
-                  stagingProjectId: b.staging_project_id,
-                  stateBefore: b.state_before,
-                  stateAfter: b.state_after
+                  description: b.description || '',
+                  isUndone: Boolean(b.is_undone),
+                  prodProjectId: b.prod_project_id || null,
+                  stagingProjectId: b.staging_project_id || null,
+                  stateBefore: parseState(b.state_before),
+                  stateAfter: parseState(b.state_after)
                 };
                 setVersionBackups((prev) => {
                   const exists = prev.find(item => item.id === mappedBackup.id);
+                  let updated: VersionBackup[];
                   if (exists) {
-                    return prev.map(item => item.id === mappedBackup.id ? mappedBackup : item);
+                    updated = prev.map(item => item.id === mappedBackup.id ? { ...item, ...mappedBackup } : item);
                   } else {
-                    return [mappedBackup, ...prev].slice(0, 50);
+                    updated = [mappedBackup, ...prev];
                   }
+                  return updated.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 100);
                 });
               } else if (payload.eventType === 'DELETE') {
                 setVersionBackups((prev) => prev.filter(item => item.id !== payload.old.id));
@@ -1461,12 +1470,15 @@ export default function App() {
         .subscribe((status, err) => {
            if (status === 'SUBSCRIBED') {
              console.log('Realtime connected successfully.');
-           } else if (status === 'CHANNEL_ERROR') {
-             console.warn('Realtime channel error', err);
-           } else if (status === 'TIMED_OUT') {
-             console.warn('Realtime channel timed out');
-           } else if (status === 'CLOSED') {
-             console.log('Realtime channel closed');
+           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+             console.warn('Realtime channel status:', status, err);
+             if (isMounted) {
+               setTimeout(() => {
+                 if (isMounted) {
+                   setupRealtime();
+                 }
+               }, 3000);
+             }
            }
         });
 
