@@ -336,8 +336,9 @@ export function VersionControlPage({
   const isDetailsPending = useMemo(() => {
     if (!selectedVersionId) return false;
 
-    // If version backups list is loaded and selectedVersionId is not in it, it does not exist
-    if (versionBackups.length > 0 && !versionBackups.some((b) => b.id === selectedVersionId)) {
+    // If version snapshot does not exist in versionBackups, it does not exist / was deleted (prevent infinite skeleton)
+    const exists = versionBackups.some((b) => b.id === selectedVersionId);
+    if (!exists) {
       return false;
     }
 
@@ -351,8 +352,7 @@ export function VersionControlPage({
       });
     }
 
-    // If versionBackups is still loading / empty
-    return true;
+    return false;
   }, [selectedVersionId, versionBackups, selectedVersionGroup, selectedVersion, loadedDetails]);
 
   const isDetailLoading = detailLoading || isDetailsPending;
@@ -458,9 +458,21 @@ export function VersionControlPage({
         const remaining = versionBackups.filter((b) => !idsToDelete.includes(b.id));
         if (remaining.length > 0) {
           setSelectedVersionId(remaining[0].id);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("versionControl", "true");
+            next.set("versionId", remaining[0].id);
+            return next;
+          }, { replace: true });
         } else {
           setSelectedVersionId(null);
           setShowDetailMobile(false);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("versionControl", "true");
+            next.delete("versionId");
+            return next;
+          }, { replace: true });
         }
       }
 
@@ -726,9 +738,14 @@ export function VersionControlPage({
           </div>
 
           {/* Timeline List Items */}
-          <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-slate-100 dark:divide-zinc-800/60">
+          <div
+            className={cn(
+              "flex-1 overflow-y-auto min-h-0 divide-y divide-slate-100 dark:divide-zinc-800/60",
+              filteredBackups.length === 0 && "flex flex-col items-center justify-center"
+            )}
+          >
             {filteredBackups.length === 0 ? (
-              <div className="text-center py-20 text-slate-400 dark:text-zinc-500 px-6">
+              <div className="flex-1 flex flex-col items-center justify-center text-center py-12 text-slate-400 dark:text-zinc-500 px-6">
                 <History size={30} className="mx-auto mb-3 opacity-30 stroke-[1.5]" />
                 <p className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                   {searchQuery ? "No matching snapshots" : "No version snapshots yet"}
@@ -913,7 +930,7 @@ export function VersionControlPage({
             isResizing && "pointer-events-none select-none"
           )}
         >
-          {isDetailLoading && selectedVersionId ? (
+          {isDetailLoading && selectedVersionId && versionBackups.some((b) => b.id === selectedVersionId) ? (
             <VersionDetailSkeleton
               isMobile={!isDesktop}
               onBack={() => {

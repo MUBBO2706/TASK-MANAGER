@@ -419,15 +419,32 @@ export function VersionDetailView({
   if (!version) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-slate-50/50 dark:bg-black/50 p-6 sm:p-8 text-center">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-600 mb-4 border border-slate-200 dark:border-zinc-800">
-          <History size={24} className="stroke-[1.75]" />
-        </div>
+        <History size={36} className="text-slate-400 dark:text-zinc-600 mb-3 opacity-40 stroke-[1.5]" />
         <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200 tracking-tight">
           No Version Snapshot Selected
         </h3>
         <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mt-1.5 leading-relaxed">
           Select any version snapshot or audit event from the timeline to inspect its full state specifications, changes, and perform 1-click rollbacks.
         </p>
+        {!isDesktop && onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+          >
+            <ChevronLeft size={15} />
+            <span>Back to Version Control</span>
+          </button>
+        )}
+        {isDesktop && onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+          >
+            <span>Clear Selection</span>
+          </button>
+        )}
       </div>
     );
   }

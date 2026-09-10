@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Loader, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const CUSTOM_COL_RESIZE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M8 9L5 12L8 15V9Z' fill='%230f172a'/%3E%3Cpath d='M16 9L19 12L16 15V9Z' fill='%230f172a'/%3E%3Cline x1='12' y1='6' x2='12' y2='18' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, col-resize`;
@@ -66,29 +66,35 @@ export const VersionDetailSkeleton = ({
 }) => {
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-black overflow-hidden relative">
-      {/* Detail Header Skeleton */}
-      <div className="border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#0c0c0e] shrink-0">
-        <div className="px-3.5 sm:px-5 py-2.5 sm:py-3">
-          <div className="flex items-center justify-between gap-3">
-            {/* Left: Back button (mobile only) + Badges */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              {isMobile && (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="p-1 -ml-1 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors cursor-pointer shrink-0"
-                  title="Back"
-                >
-                  <ChevronLeft size={20} className="stroke-[2.25]" />
-                </button>
-              )}
+      {/* Detail Header Skeleton - Single row matching VersionDetailView exactly */}
+      <div className="border-b border-slate-200/80 dark:border-zinc-800/80 bg-white/95 dark:bg-[#0c0c0e]/95 shrink-0 px-3 sm:px-5 py-2 sm:py-2.5">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          {/* Left: Back button (mobile only) + Badges */}
+          <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar py-0.5">
+            {isMobile && onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="p-1 -ml-1 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer shrink-0 rounded-md"
+                title="Back to Timeline"
+              >
+                <ChevronLeft size={18} className="stroke-[2.25]" />
+              </button>
+            )}
 
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="h-5 w-20 bg-slate-200 dark:bg-zinc-800 rounded-md animate-pulse shrink-0" />
-                <div className="h-5 w-14 bg-slate-100 dark:bg-zinc-800/60 rounded-md animate-pulse shrink-0" />
-                <div className="h-4 w-12 bg-slate-100 dark:bg-zinc-800/50 rounded-full animate-pulse shrink-0" />
-              </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {/* Operation type badge skeleton */}
+              <div className="h-5 w-20 bg-slate-200 dark:bg-zinc-800 rounded-md animate-pulse shrink-0" />
+              <span className="text-slate-300 dark:text-zinc-700 text-[10px] shrink-0">•</span>
+              {/* Status badge skeleton (Active/Undone) */}
+              <div className="h-4 w-12 bg-slate-100 dark:bg-zinc-800/60 rounded animate-pulse shrink-0" />
             </div>
+          </div>
+
+          {/* Right Actions: Timestamp & Desktop Undo/Redo Skeleton */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Timestamp skeleton (shown before Undo/Redo on desktop and on right for mobile) */}
+            <div className="h-3 w-16 sm:w-22 bg-slate-100 dark:bg-zinc-800/60 rounded animate-pulse shrink-0" />
 
             {/* Desktop Undo & Redo Action Buttons Skeleton */}
             <div className="hidden md:flex items-center gap-1.5 shrink-0">
@@ -96,9 +102,6 @@ export const VersionDetailSkeleton = ({
               <div className="h-7 w-14 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
             </div>
           </div>
-
-          {/* Subtitle / Timestamp */}
-          <div className="h-3 w-40 bg-slate-100 dark:bg-zinc-800/60 rounded animate-pulse mt-1.5" />
         </div>
       </div>
 
@@ -285,37 +288,33 @@ export default function VersionControlSkeleton({
         />
       )}
 
-      {/* Top Navigation Bar Skeleton */}
+      {/* Top Navigation Bar Skeleton - Matching VersionControlPage header */}
       <div className="h-12 px-3 sm:px-4 border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#0c0c0e] flex items-center justify-between gap-3 shrink-0">
         {/* Left: Back chevron + Heading Skeleton */}
         <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 -ml-1 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors cursor-pointer shrink-0"
-            title="Back"
+            className="p-1.5 -ml-1 text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer shrink-0 rounded-lg"
+            title="Back to Workspace"
           >
             <ChevronLeft size={20} className="stroke-[2.25]" />
           </button>
-          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-zinc-500">
-            <div className="h-4 w-20 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse hidden md:block" />
-            <ChevronRight size={13} className="text-slate-300 dark:text-zinc-700 hidden md:block" />
-            <div className="h-4 w-44 sm:w-52 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse" />
-            <div className="h-4 w-16 bg-blue-500/10 rounded-full animate-pulse hidden sm:block ml-1" />
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-3.5 w-20 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse hidden md:block shrink-0" />
+            <ChevronRight size={13} className="text-slate-300 dark:text-zinc-700 hidden md:block shrink-0" />
+            <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
+              <span>Version Control</span>
+            </h1>
           </div>
         </div>
 
-        {/* Right: Close button */}
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-            title="Close"
-          >
-            <X size={18} />
-          </button>
-        )}
+        {/* Right: Snapshots & Revisions count skeleton (matching actual header) */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="h-3 w-16 sm:w-20 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse" />
+          <span className="text-slate-300 dark:text-zinc-700 font-normal text-xs">•</span>
+          <div className="h-3 w-14 sm:w-16 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse" />
+        </div>
       </div>
 
       {/* Main Body Skeleton */}
