@@ -30,7 +30,8 @@ import {
   Code2, 
   Diff as DiffIcon,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Project, VersionBackup, SqlTask } from "../../types";
@@ -164,7 +165,9 @@ function computeTaskDiffs(tasksBefore: SqlTask[], tasksAfter: SqlTask[]) {
       (newTask as any).function_code ||
       "";
 
-    const codeChanged = oldCode.trim() !== newCode.trim();
+    const codeChanged = (oldTask as any).isContentStripped || (newTask as any).isContentStripped 
+      ? !!((oldTask as any).wasCodeModified || (newTask as any).wasCodeModified) 
+      : oldCode.trim() !== newCode.trim();
     const titleChanged = (oldTask.title || "") !== (newTask.title || "");
     const statusChanged = (oldTask.status || "") !== (newTask.status || "");
     const descriptionChanged = (oldTask.description || "") !== (newTask.description || "");
@@ -206,19 +209,103 @@ export function VersionDetailView({
   const [expandedRemovedId, setExpandedRemovedId] = useState<string | null>(null);
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(true);
   const [expandedRevisionIds, setExpandedRevisionIds] = useState<Set<string>>(new Set());
+  const [fetchedTaskStates, setFetchedTaskStates] = useState<Record<string, { stateBefore?: any, stateAfter?: any }>>({});
+  const [loadingTaskId, setLoadingTaskId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState<"undo" | "redo" | null>(null);
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
 
   const version = versionGroup && versionGroup.length > 0 ? versionGroup[0] : null;
   const oldestVersionInGroup = versionGroup && versionGroup.length > 0 ? versionGroup[versionGroup.length - 1] : null;
 
+  const handleExpandTaskForDiff = async (taskId: string, currentExpandedId: string | null, setter: React.Dispatch<React.SetStateAction<string | null>>, task1: SqlTask | undefined, task2: SqlTask | undefined) => {
+
+    const isExpanding = currentExpandedId !== taskId;
+
+    setter(isExpanding ? taskId : null);
+
+
+
+    if (isExpanding && versionGroup && versionGroup.length > 0) {
+
+      const needsFetch = (task1 && task1.isContentStripped) || (task2 && task2.isContentStripped);
+
+      if (needsFetch && !fetchedTaskStates[taskId]) {
+
+        try {
+
+          setLoadingTaskId(taskId);
+
+          const oldest = versionGroup[versionGroup.length - 1];
+
+          const latest = versionGroup[0];
+
+
+
+          const devKeysModules = import.meta.glob("../../lib/dev-keys.ts", { eager: true });
+
+          const devKeys: any = devKeysModules["../../lib/dev-keys.ts"] || {};
+
+          const apiKey = import.meta.env.VITE_API_KEY || devKeys.VITE_API_KEY || "sk_sync_b4k92jdm10";
+
+
+
+          let url = `/api/version-task-state?taskId=${taskId}&api_key=${apiKey}`;
+
+          if (task1) url += `&versionIdBefore=${oldest.id}`;
+
+          if (task2) url += `&versionIdAfter=${latest.id}`;
+
+
+
+          const res = await fetch(url);
+
+          if (res.ok) {
+
+            const data = await res.json();
+
+            setFetchedTaskStates(prev => ({ ...prev, [taskId]: data }));
+
+          }
+
+        } catch (err) {
+
+          console.error("Failed to fetch full task details", err);
+
+        } finally {
+
+          setLoadingTaskId(null);
+
+        }
+
+      }
+
+    }
+
+  };
+
   const existingProjectIds = useMemo(
     () => new Set(currentProjects.map((p) => p.id)),
     [currentProjects]
   );
 
-  const tasksBefore = useMemo(() => oldestVersionInGroup?.stateBefore?.tasks || [], [oldestVersionInGroup]);
-  const tasksAfter = useMemo(() => version?.stateAfter?.tasks || [], [version]);
+  const tasksBefore = useMemo(() => {
+    return (oldestVersionInGroup?.stateBefore?.tasks || []).map((t: SqlTask) => {
+      if (fetchedTaskStates[t.id]?.stateBefore) {
+         return { ...t, ...fetchedTaskStates[t.id].stateBefore };
+      }
+      return t;
+    });
+  }, [oldestVersionInGroup, fetchedTaskStates]);
+
+  const tasksAfter = useMemo(() => {
+    return (version?.stateAfter?.tasks || []).map((t: SqlTask) => {
+      if (fetchedTaskStates[t.id]?.stateAfter) {
+         return { ...t, ...fetchedTaskStates[t.id].stateAfter };
+      }
+      return t;
+    });
+  }, [version, fetchedTaskStates]);
+
   const projectsBefore = useMemo(() => oldestVersionInGroup?.stateBefore?.projects || [], [oldestVersionInGroup]);
   const projectsAfter = useMemo(() => version?.stateAfter?.projects || [], [version]);
 
@@ -237,8 +324,14 @@ export function VersionDetailView({
     if (!versionGroup || versionGroup.length <= 1) return [];
     
     return versionGroup.map((rev, idx) => {
-      const revTasksBefore = rev.stateBefore?.tasks || [];
-      const revTasksAfter = rev.stateAfter?.tasks || [];
+      const revTasksBefore = (rev.stateBefore?.tasks || []).map((t: SqlTask) => {
+         if (fetchedTaskStates[t.id]?.stateBefore) return { ...t, ...fetchedTaskStates[t.id].stateBefore };
+         return t;
+      });
+      const revTasksAfter = (rev.stateAfter?.tasks || []).map((t: SqlTask) => {
+         if (fetchedTaskStates[t.id]?.stateAfter) return { ...t, ...fetchedTaskStates[t.id].stateAfter };
+         return t;
+      });
       const diffs = computeTaskDiffs(revTasksBefore, revTasksAfter);
       return {
         revision: rev,
@@ -248,7 +341,7 @@ export function VersionDetailView({
         hasChanges: diffs.addedTasks.length > 0 || diffs.removedTasks.length > 0 || diffs.modifiedTaskDiffs.length > 0
       };
     });
-  }, [versionGroup]);
+  }, [versionGroup, fetchedTaskStates]);
 
   // When confirmRestore opens, initialize targetVersionId
   useEffect(() => {
@@ -286,7 +379,7 @@ export function VersionDetailView({
     setExpandedAddedId(null);
     setExpandedRemovedId(null);
     setExpandedTaskId(null);
-  }, [version?.id, modifiedTaskDiffs]);
+  }, [version?.id]);
 
   if (detailLoading) {
     return <VersionDetailSkeleton />;
@@ -912,7 +1005,7 @@ export function VersionDetailView({
                             <div key={task.id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
                               {/* Task Row Header */}
                               <div
-                                onClick={() => setExpandedDiffId(isDiffExpanded ? null : task.id)}
+                                onClick={() => handleExpandTaskForDiff(task.id, expandedDiffId, setExpandedDiffId, oldTask, task)}
                                 className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
@@ -939,7 +1032,9 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-mono hidden sm:inline text-slate-400 dark:text-zinc-500">
                                     ID: {task.id.slice(0, 8)}
                                   </span>
-                                  {isDiffExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                  {loadingTaskId === task.id ? (
+                                    <Loader2 size={14} className="animate-spin text-blue-500" />
+                                  ) : isDiffExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </div>
                               </div>
 
@@ -1031,7 +1126,7 @@ export function VersionDetailView({
                           return (
                             <div key={task.id} className="transition-colors hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10">
                               <div
-                                onClick={() => setExpandedAddedId(isExpanded ? null : task.id)}
+                                onClick={() => handleExpandTaskForDiff(task.id, expandedAddedId, setExpandedAddedId, undefined, task)}
                                 className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
@@ -1052,7 +1147,9 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400">
                                     {task.status || "created"}
                                   </span>
-                                  {isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                  {loadingTaskId === task.id ? (
+                                    <Loader2 size={14} className="animate-spin text-emerald-500" />
+                                  ) : isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                 </div>
                               </div>
 
@@ -1098,7 +1195,7 @@ export function VersionDetailView({
                           return (
                             <div key={task.id} className="transition-colors hover:bg-rose-50/30 dark:hover:bg-rose-950/10">
                               <div
-                                onClick={() => setExpandedRemovedId(isExpanded ? null : task.id)}
+                                onClick={() => handleExpandTaskForDiff(task.id, expandedRemovedId, setExpandedRemovedId, task, undefined)}
                                 className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-2 cursor-pointer"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
@@ -1119,7 +1216,9 @@ export function VersionDetailView({
                                   <span className="text-[10px] font-mono text-rose-700 dark:text-rose-400">
                                     Removed
                                   </span>
-                                  {isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                  {loadingTaskId === task.id ? (
+                                    <Loader2 size={14} className="animate-spin text-rose-500" />
+                                  ) : isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                 </div>
                               </div>
 
@@ -1196,7 +1295,7 @@ export function VersionDetailView({
                     return (
                       <div key={task.id} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
                         <div
-                          onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                          onClick={() => handleExpandTaskForDiff(task.id, expandedTaskId, setExpandedTaskId, undefined, task)}
                           className="py-2.5 sm:py-3 px-1 sm:px-2 flex items-center justify-between gap-3 cursor-pointer"
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -1238,7 +1337,9 @@ export function VersionDetailView({
                             >
                               {task.status || "pending"}
                             </span>
-                            {isExpanded ? (
+                            {loadingTaskId === task.id ? (
+                              <Loader2 size={13} className="animate-spin text-blue-500" />
+                            ) : isExpanded ? (
                               <ChevronUp size={13} className="text-slate-400" />
                             ) : (
                               <ChevronDown size={13} className="text-slate-400" />

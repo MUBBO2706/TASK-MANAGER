@@ -797,9 +797,43 @@ app.get("/api/version-backup-detail", checkApiKey, async (req, res) => {
     if (error) throw error;
     
     const result = (data || []).reduce((acc: any, b: any) => {
+      // Pre-calculate which tasks had their code modified before stripping
+      const beforeTasks = b.state_before?.tasks || [];
+      const afterTasks = b.state_after?.tasks || [];
+      
+      const modifiedCodeMap: Record<string, boolean> = {};
+      
+      afterTasks.forEach((afterTask: any) => {
+         const beforeTask = beforeTasks.find((t: any) => t.id === afterTask.id);
+         if (beforeTask) {
+             const oldCode = (beforeTask.type === "edge_function" ? beforeTask.edgeFiles?.[0]?.code : beforeTask.sql) || "";
+             const newCode = (afterTask.type === "edge_function" ? afterTask.edgeFiles?.[0]?.code : afterTask.sql) || "";
+             if (oldCode.trim() !== newCode.trim()) {
+                 modifiedCodeMap[afterTask.id] = true;
+             }
+         }
+      });
+      
+      // Strip heavy text payload from the JSONs to save network bandwidth (Lazy Loading for task code)
+      const stripHeavyFields = (state: any) => {
+        if (!state || !state.tasks) return state;
+        return {
+          ...state,
+          tasks: state.tasks.map((t: any) => {
+            const { sql, functionCode, edgeFiles, edgeSecrets, ...rest } = t;
+            return {
+              ...rest,
+              // Add flags so the frontend knows it has been stripped but retains diff status
+              isContentStripped: true,
+              wasCodeModified: !!modifiedCodeMap[t.id]
+            };
+          })
+        };
+      };
+
       acc[b.id] = {
-        stateBefore: b.state_before,
-        stateAfter: b.state_after
+        stateBefore: stripHeavyFields(b.state_before),
+        stateAfter: stripHeavyFields(b.state_after)
       };
       return acc;
     }, {});
@@ -809,6 +843,43 @@ app.get("/api/version-backup-detail", checkApiKey, async (req, res) => {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to fetch version backup details:", errDetails);
     res.status(500).json({ error: "Failed to fetch version backup details", details: errDetails });
+  }
+});
+
+// Fetch full task details for a single task inside a specific version backup
+app.get("/api/version-task-state", checkApiKey, async (req, res) => {
+  try {
+    const { versionIdBefore, versionIdAfter, taskId } = req.query;
+    if (!taskId) {
+      return res.status(400).json({ error: "taskId is required" });
+    }
+
+    const promises = [];
+    if (versionIdBefore) {
+      promises.push(supabase.rpc('get_version_task_state', { version_id: versionIdBefore, target_task_id: taskId, is_before: true }).then(r => ({ type: 'before', ...r })));
+    }
+    if (versionIdAfter) {
+      promises.push(supabase.rpc('get_version_task_state', { version_id: versionIdAfter, target_task_id: taskId, is_before: false }).then(r => ({ type: 'after', ...r })));
+    }
+
+    const results = await Promise.all(promises);
+
+    const responseData: any = { stateBefore: null, stateAfter: null };
+    for (const r of results) {
+       if (r.error) {
+          console.warn(`Failed fetching ${r.type} state for task:`, JSON.stringify(r.error, null, 2));
+       } else if (r.type === 'before') {
+          responseData.stateBefore = r.data;
+       } else if (r.type === 'after') {
+          responseData.stateAfter = r.data;
+       }
+    }
+
+    res.json(responseData);
+  } catch (err) {
+    const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Failed to fetch version task state:", errDetails);
+    res.status(500).json({ error: "Failed to fetch version task state", details: errDetails });
   }
 });
 

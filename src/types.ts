@@ -29,6 +29,8 @@ export interface SqlTask {
   orderIndex?: number;
   productionTaskId?: string;
   isContentFetched?: boolean;
+  isContentStripped?: boolean;
+  wasCodeModified?: boolean;
 }
 
 export interface Project {

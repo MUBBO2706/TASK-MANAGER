@@ -119,21 +119,34 @@ FROM projects p
 LEFT JOIN tasks t ON p.id = t.project_id
 GROUP BY p.id, p.name, p.created_at;
 
--- 9. Computed columns for lightweight task previews (capped to 200 characters)
-CREATE OR REPLACE FUNCTION sql_preview(tasks)
-RETURNS text AS $$
-  SELECT substring(coalesce($1.sql, '') from 1 for 200);
-$$ LANGUAGE sql STABLE;
+-- 10. Helper function to extract specific task's full state from a version backup
+CREATE OR REPLACE FUNCTION get_version_task_state(version_id TEXT, target_task_id TEXT, is_before BOOLEAN)
+RETURNS jsonb AS $$
+DECLARE
+  target_state jsonb;
+  found_task jsonb;
+BEGIN
+  -- Get the state_before or state_after from the version_backups table
+  IF is_before THEN
+    SELECT state_before INTO target_state FROM version_backups WHERE id = version_id;
+  ELSE
+    SELECT state_after INTO target_state FROM version_backups WHERE id = version_id;
+  END IF;
 
-CREATE OR REPLACE FUNCTION function_code_preview(tasks)
-RETURNS text AS $$
-  SELECT substring(coalesce($1.function_code, '') from 1 for 200);
-$$ LANGUAGE sql STABLE;
+  -- Extract the specific task object from the tasks array within the JSONB state
+  IF jsonb_typeof(target_state->'tasks') = 'array' THEN
+    SELECT task_elem INTO found_task
+    FROM jsonb_array_elements(target_state->'tasks') AS task_elem
+    WHERE (task_elem->>'id') = target_task_id
+    LIMIT 1;
+  END IF;
+  
+  RETURN found_task;
+END;
+$$ LANGUAGE plpgsql STABLE;
 
-CREATE OR REPLACE FUNCTION edge_files_preview(tasks)
-RETURNS text AS $$
-  SELECT substring(coalesce($1.edge_files->0->>'code', '') from 1 for 200);
-$$ LANGUAGE sql STABLE;
+-- Reload schema cache to ensure the function is immediately available via API
+NOTIFY pgrst, 'reload schema';
 
 
 

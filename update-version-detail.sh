@@ -1,0 +1,1 @@
+sed -i 's/const \[confirmRestore/const \[fetchedTaskStates, setFetchedTaskStates\] = useState<Record<string, { stateBefore?: any, stateAfter?: any }>>({});\n  const \[loadingTaskId, setLoadingTaskId\] = useState<string | null>(null);\n  const \[confirmRestore/' src/components/version-control/VersionDetailView.tsx
