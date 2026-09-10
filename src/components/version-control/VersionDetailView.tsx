@@ -50,6 +50,7 @@ interface VersionDetailViewProps {
   onRestore: (backup: VersionBackup, type: "undo" | "redo") => Promise<void>;
   isRestoring?: boolean;
   detailLoading?: boolean;
+  activeProjectId?: string | null;
 }
 
 export function getActionBadgeConfig(action: string) {
@@ -199,6 +200,7 @@ export function VersionDetailView({
   onRestore,
   isRestoring = false,
   detailLoading = false,
+  activeProjectId,
 }: VersionDetailViewProps) {
   const [taskSearch, setTaskSearch] = useLocalStorage("version-detail-task-search", "");
   const [selectedTaskTab, setSelectedTaskTab] = useHybridState<"all" | "sql" | "edge">("vTaskTab", "all");
@@ -288,23 +290,38 @@ export function VersionDetailView({
     [currentProjects]
   );
 
+  const targetProjectId = useMemo(() => {
+    if (activeProjectId === version?.stagingProjectId) {
+      return version?.stagingProjectId;
+    }
+    return version?.prodProjectId;
+  }, [activeProjectId, version]);
+
   const tasksBefore = useMemo(() => {
-    return (oldestVersionInGroup?.stateBefore?.tasks || []).map((t: SqlTask) => {
+    const rawTasks = oldestVersionInGroup?.stateBefore?.tasks || [];
+    const filtered = targetProjectId 
+      ? rawTasks.filter((t: SqlTask) => t.projectId === targetProjectId)
+      : rawTasks;
+    return filtered.map((t: SqlTask) => {
       if (fetchedTaskStates[t.id]?.stateBefore) {
          return { ...t, ...fetchedTaskStates[t.id].stateBefore };
       }
       return t;
     });
-  }, [oldestVersionInGroup, fetchedTaskStates]);
+  }, [oldestVersionInGroup, fetchedTaskStates, targetProjectId]);
 
   const tasksAfter = useMemo(() => {
-    return (version?.stateAfter?.tasks || []).map((t: SqlTask) => {
+    const rawTasks = version?.stateAfter?.tasks || [];
+    const filtered = targetProjectId 
+      ? rawTasks.filter((t: SqlTask) => t.projectId === targetProjectId)
+      : rawTasks;
+    return filtered.map((t: SqlTask) => {
       if (fetchedTaskStates[t.id]?.stateAfter) {
          return { ...t, ...fetchedTaskStates[t.id].stateAfter };
       }
       return t;
     });
-  }, [version, fetchedTaskStates]);
+  }, [version, fetchedTaskStates, targetProjectId]);
 
   const projectsBefore = useMemo(() => oldestVersionInGroup?.stateBefore?.projects || [], [oldestVersionInGroup]);
   const projectsAfter = useMemo(() => version?.stateAfter?.projects || [], [version]);

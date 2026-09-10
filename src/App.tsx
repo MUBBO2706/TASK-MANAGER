@@ -515,8 +515,46 @@ export default function App() {
       stateAfter = stateAfterParam || { projects: [], tasks: [] };
     }
 
-    const beforeSig = getBackupStateSignature(stateBefore);
-    const afterSig = getBackupStateSignature(stateAfter);
+    let finalStateBefore = stateBefore;
+    let finalStateAfter = stateAfter;
+
+    if (typeof stateBeforeOrApiCall !== 'function' && ((stateBefore.tasks && stateBefore.tasks.length > 0) || (stateAfter.tasks && stateAfter.tasks.length > 0))) {
+      try {
+        const contentResp = await fetch(`/api/content?api_key=${API_KEY_FALLBACK}`);
+        if (contentResp.ok) {
+          const fullTasks = await contentResp.json();
+          const fullTasksMap = new Map(fullTasks.map((t: any) => [t.id, t]));
+          
+          const enrich = (state: VersionBackupData) => {
+            if (!state || !state.tasks) return state;
+            return {
+              ...state,
+              tasks: state.tasks.map((task) => {
+                const fullTask = fullTasksMap.get(task.id) as any;
+                if (fullTask) {
+                  return {
+                    ...task,
+                    sql: fullTask.sql || '',
+                    functionCode: fullTask.functionCode || '',
+                    edgeFiles: fullTask.edgeFiles || [],
+                    edgeSecrets: fullTask.edgeSecrets || []
+                  };
+                }
+                return task;
+              })
+            };
+          };
+          
+          finalStateBefore = enrich(stateBefore);
+          finalStateAfter = enrich(stateAfter);
+        }
+      } catch (err) {
+        console.warn("Failed to enrich backup with full task contents:", err);
+      }
+    }
+
+    const beforeSig = getBackupStateSignature(finalStateBefore);
+    const afterSig = getBackupStateSignature(finalStateAfter);
 
     // Rule 1: Discard if stateBefore is identical to stateAfter (no net change, e.g. typed and deleted or canceled)
     if (beforeSig === afterSig) {
@@ -540,8 +578,8 @@ export default function App() {
       isUndone: false,
       prodProjectId: prodProjectId || '',
       stagingProjectId: stagingProjectId || null,
-      stateBefore,
-      stateAfter
+      stateBefore: finalStateBefore,
+      stateAfter: finalStateAfter
     };
 
     setVersionBackups(prev => {

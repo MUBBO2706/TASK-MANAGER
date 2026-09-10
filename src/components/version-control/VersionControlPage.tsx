@@ -864,6 +864,7 @@ export function VersionControlPage({
             versionGroup={selectedVersionGroup}
             currentGroup={selectedGroup}
             currentProjects={currentProjects}
+            activeProjectId={activeProjectId}
             onBack={() => {
               if (isDesktop) {
                 setSelectedVersionId(null);
