@@ -76,14 +76,16 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
     userAgent.includes('agent') ||
     userAgent.includes('rest-client');
 
-  // If it clearly has an in-app header, it's internal.
-  if (isInAppHeader) {
+  // If it comes from the app itself via browser, it will have sec-fetch-site = same-origin
+  const isBrowserInternal = secFetchSite === 'same-origin';
+
+  // If it clearly has an in-app header OR is a browser internal fetch, it's internal.
+  if (isInAppHeader || isBrowserInternal) {
     return next();
   }
 
   // A request is considered EXTERNAL if it has an API key OR an external tool user agent.
-  // If it's just a regular browser navigation/fetch from our app without API key, it's internal.
-  const isExternal = hasApiKey || (isExternalToolUserAgent && secFetchSite !== 'same-origin');
+  const isExternal = hasApiKey || isExternalToolUserAgent;
 
   if (!isExternal) {
     return next();
