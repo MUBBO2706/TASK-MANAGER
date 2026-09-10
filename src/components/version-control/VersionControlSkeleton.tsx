@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Loader } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader, History } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { VersionBackup } from "../../types";
 
 const CUSTOM_COL_RESIZE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M8 9L5 12L8 15V9Z' fill='%230f172a'/%3E%3Cpath d='M16 9L19 12L16 15V9Z' fill='%230f172a'/%3E%3Cline x1='12' y1='6' x2='12' y2='18' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, col-resize`;
 
@@ -11,6 +12,7 @@ export interface VersionControlSkeletonProps {
   onClose?: () => void;
   selectedVersionId?: string | null;
   isMobileDetail?: boolean;
+  versionBackups?: VersionBackup[];
 }
 
 export const VersionTimelineSkeleton = () => {
@@ -44,15 +46,20 @@ export const VersionTimelineSkeleton = () => {
   );
 };
 
-export const VersionEmptyStateSkeleton = () => {
+export const VersionEmptyStateSkeleton = ({
+  showButton = false,
+}: {
+  showButton?: boolean;
+}) => {
   return (
     <div className="flex-1 flex flex-col items-center justify-center h-full bg-slate-50/50 dark:bg-black/50 p-6 sm:p-8 text-center select-none">
-      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center mb-4 border border-slate-200 dark:border-zinc-800">
-        <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-zinc-800 animate-pulse" />
-      </div>
+      <History size={36} className="text-slate-300 dark:text-zinc-700 mb-3 stroke-[1.5] animate-pulse opacity-40" />
       <div className="h-4 w-48 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse mb-2" />
       <div className="h-3 w-72 max-w-full bg-slate-100 dark:bg-zinc-800/60 rounded animate-pulse" />
       <div className="h-3 w-56 max-w-full bg-slate-100 dark:bg-zinc-800/60 rounded animate-pulse mt-1.5" />
+      {showButton && (
+        <div className="mt-4 h-7 w-32 bg-slate-200/80 dark:bg-zinc-800/80 rounded-md animate-pulse" />
+      )}
     </div>
   );
 };
@@ -125,12 +132,17 @@ export default function VersionControlSkeleton({
   onClose,
   selectedVersionId,
   isMobileDetail,
+  versionBackups,
 }: VersionControlSkeletonProps) {
   const [searchParams] = useSearchParams();
   const urlVersionId = searchParams.get("versionId");
   const effectiveVersionId =
     selectedVersionId !== undefined ? selectedVersionId : urlVersionId;
-  const hasSelectedVersion = Boolean(effectiveVersionId);
+  const hasSelectedVersion = Boolean(
+    effectiveVersionId &&
+      (!versionBackups ||
+        versionBackups.some((b) => b.id === effectiveVersionId))
+  );
 
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
@@ -373,7 +385,7 @@ export default function VersionControlSkeleton({
               {hasSelectedVersion ? (
                 <VersionDetailSkeleton isMobile={false} />
               ) : (
-                <VersionEmptyStateSkeleton />
+                <VersionEmptyStateSkeleton showButton={Boolean(effectiveVersionId)} />
               )}
             </div>
           </>

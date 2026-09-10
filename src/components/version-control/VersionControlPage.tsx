@@ -133,6 +133,9 @@ export function VersionControlPage({
       setSelectedVersionId(urlVersionId);
       setLastVisitedVersionId(urlVersionId);
       setShowDetailMobile(true);
+    } else {
+      setSelectedVersionId(null);
+      setShowDetailMobile(false);
     }
   }, [urlVersionId, setLastVisitedVersionId]);
 
@@ -515,6 +518,7 @@ export function VersionControlPage({
         selectedVersionId={selectedVersionId || urlVersionId}
         isMobileDetail={showDetailMobile || Boolean(urlVersionId)}
         onClose={handleClosePage}
+        versionBackups={versionBackups}
       />
     );
   }
@@ -979,6 +983,7 @@ export function VersionControlPage({
               onRestore={handleRestore}
               isRestoring={isRestoring}
               detailLoading={isDetailLoading}
+              selectedVersionId={selectedVersionId || urlVersionId}
             />
           )}
         </div>

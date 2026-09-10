@@ -51,6 +51,7 @@ interface VersionDetailViewProps {
   isRestoring?: boolean;
   detailLoading?: boolean;
   activeProjectId?: string | null;
+  selectedVersionId?: string | null;
 }
 
 export function getActionBadgeConfig(action: string) {
@@ -201,6 +202,7 @@ export function VersionDetailView({
   isRestoring = false,
   detailLoading = false,
   activeProjectId,
+  selectedVersionId,
 }: VersionDetailViewProps) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
@@ -417,6 +419,7 @@ export function VersionDetailView({
   }
 
   if (!version) {
+    const hasStaleSelection = Boolean(selectedVersionId);
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-slate-50/50 dark:bg-black/50 p-6 sm:p-8 text-center">
         <History size={36} className="text-slate-400 dark:text-zinc-600 mb-3 opacity-40 stroke-[1.5]" />
@@ -429,19 +432,22 @@ export function VersionDetailView({
         {!isDesktop && onBack && (
           <button
             type="button"
+            id="version-detail-back-to-vc-btn"
             onClick={onBack}
-            className="mt-5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+            className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-transparent border border-slate-200 dark:border-zinc-800 rounded-md hover:bg-slate-100/60 dark:hover:bg-zinc-900/60 active:bg-slate-200/60 dark:active:bg-zinc-800/60 transition-colors cursor-pointer"
           >
-            <ChevronLeft size={15} />
+            <ChevronLeft size={14} className="shrink-0" />
             <span>Back to Version Control</span>
           </button>
         )}
-        {isDesktop && onBack && (
+        {isDesktop && hasStaleSelection && onBack && (
           <button
             type="button"
+            id="version-detail-clear-selection-btn"
             onClick={onBack}
-            className="mt-5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer"
+            className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-transparent border border-slate-200 dark:border-zinc-800 rounded-md hover:bg-slate-100/60 dark:hover:bg-zinc-900/60 active:bg-slate-200/60 dark:active:bg-zinc-800/60 transition-colors cursor-pointer"
           >
+            <ChevronLeft size={14} className="shrink-0" />
             <span>Clear Selection</span>
           </button>
         )}
