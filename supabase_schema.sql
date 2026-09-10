@@ -145,6 +145,40 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
+-- 11. API Access Logs Table for auditing open API requests, payloads, and responses
+CREATE TABLE IF NOT EXISTS api_logs (
+  id TEXT PRIMARY KEY,
+  created_at BIGINT NOT NULL,
+  endpoint TEXT NOT NULL,
+  method TEXT NOT NULL,
+  status_code INT NOT NULL,
+  duration_ms INT NOT NULL DEFAULT 0,
+  project_id TEXT,
+  action_type TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  request_query JSONB DEFAULT '{}'::jsonb,
+  request_body JSONB DEFAULT '{}'::jsonb,
+  response_body JSONB DEFAULT '{}'::jsonb,
+  error_message TEXT,
+  changes_summary JSONB DEFAULT '{}'::jsonb
+);
+
+ALTER TABLE api_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public access to api_logs" ON api_logs;
+CREATE POLICY "Allow public access to api_logs" ON api_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- Indexing for high-performance log inspection
+CREATE INDEX IF NOT EXISTS idx_api_logs_created_at ON api_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_logs_endpoint ON api_logs(endpoint);
+CREATE INDEX IF NOT EXISTS idx_api_logs_status_code ON api_logs(status_code);
+
+-- Enable Realtime for api_logs
+BEGIN;
+  DROP PUBLICATION IF EXISTS supabase_realtime;
+  CREATE PUBLICATION supabase_realtime FOR TABLE projects, tasks, folders, version_backups, api_logs;
+COMMIT;
+
 -- Reload schema cache to ensure the function is immediately available via API
 NOTIFY pgrst, 'reload schema';
 

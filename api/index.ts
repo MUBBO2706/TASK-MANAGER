@@ -30,6 +30,297 @@ try {
 }
 
 let memTasks: any[] = [];
+let memApiLogs: any[] = [];
+
+// Interceptor middleware to capture and log external API requests and responses
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Only log /api routes and ignore /api/logs self-fetch to prevent log recursion loops
+  if (!req.url.startsWith('/api') || req.url.startsWith('/api/logs')) {
+    return next();
+  }
+
+  // Filter out internal in-app requests:
+  // Requests originating from the internal React browser UI must NOT be logged in API access logs.
+  // ONLY external server/client calls (e.g. cURL, Python scripts, Postman, AI Agents, or calls with x-api-key / Authorization) are logged.
+  const hasApiKey = Boolean(req.headers['x-api-key'] || req.query?.api_key || req.headers['authorization']);
+  const isInAppHeader = req.headers['x-in-app'] === 'true' || req.headers['x-client-app'] === 'react-task-master';
+  const secFetchSite = req.headers['sec-fetch-site'];
+  const userAgent = ((req.headers['user-agent'] as string) || '').toLowerCase();
+  const isExternalToolUserAgent = 
+    userAgent.includes('curl') || 
+    userAgent.includes('postman') || 
+    userAgent.includes('insomnia') || 
+    userAgent.includes('python') || 
+    userAgent.includes('node-fetch') || 
+    userAgent.includes('axios') || 
+    userAgent.includes('http-client') || 
+    userAgent.includes('got') ||
+    userAgent.includes('agent') ||
+    userAgent.includes('rest-client');
+
+  if (isInAppHeader || (!hasApiKey && !isExternalToolUserAgent && secFetchSite === 'same-origin')) {
+    return next();
+  }
+
+  const startTime = Date.now();
+  const logId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  
+  const reqMethod = req.method;
+  const reqEndpoint = req.originalUrl || req.url;
+  const reqQuery = req.query || {};
+  const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1';
+  const rawUserAgent = (req.headers['user-agent'] as string) || 'Unknown External Client';
+
+  // Make safe copy of request body
+  let reqBodyCopy: any = null;
+  if (req.body && typeof req.body === 'object') {
+    try {
+      reqBodyCopy = JSON.parse(JSON.stringify(req.body));
+    } catch (_) {
+      reqBodyCopy = req.body;
+    }
+  }
+
+  // Intercept outgoing response
+  const originalJson = res.json;
+  const originalSend = res.send;
+  let responseBody: any = null;
+
+  res.json = function (body: any) {
+    responseBody = body;
+    return originalJson.apply(this, arguments as any);
+  };
+
+  res.send = function (body: any) {
+    if (responseBody === null) {
+      try {
+        responseBody = typeof body === 'string' ? JSON.parse(body) : body;
+      } catch (_) {
+        responseBody = body;
+      }
+    }
+    return originalSend.apply(this, arguments as any);
+  };
+
+  res.on('finish', async () => {
+    try {
+      const durationMs = Date.now() - startTime;
+      const statusCode = res.statusCode;
+
+      // Extract action_type from endpoint
+      let actionType: string = '';
+      if (reqEndpoint.includes('/create-staging')) actionType = 'create_staging';
+      else if (reqEndpoint.includes('/merge-staging')) actionType = 'merge_staging';
+      else if (reqEndpoint.includes('/reject-staging')) actionType = 'reject_staging';
+      else if (reqEndpoint.includes('/update-tasks')) actionType = 'update_tasks';
+      else if (reqEndpoint.includes('/create-task')) actionType = 'create_task';
+      else if (reqEndpoint.includes('/update-task')) actionType = 'update_task';
+      else if (reqEndpoint.includes('/delete-task')) actionType = 'delete_task';
+      else if (reqEndpoint.includes('/sync-task-diffs')) actionType = 'sync_diffs';
+      else if (reqEndpoint.includes('/diff-details')) actionType = 'diff_details';
+      else if (reqEndpoint.includes('/reorder-tasks')) actionType = 'reorder_tasks';
+      else if (reqEndpoint.includes('/execute-sql')) actionType = 'execute_sql';
+      else if (reqEndpoint.includes('/rollback')) actionType = 'rollback';
+      else {
+        const parts = req.path.split('/').filter(Boolean);
+        actionType = parts[parts.length - 1] || 'api_call';
+      }
+
+      const projectId = reqBodyCopy?.projectId || reqBodyCopy?.project_id || reqBodyCopy?.stagingProjectId || (reqQuery?.projectId as string) || null;
+
+      let errorMessage: string | null = null;
+      if (statusCode >= 400 && responseBody) {
+        errorMessage = responseBody?.error || responseBody?.message || (typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody));
+      }
+
+      // Build changes summary
+      let changesSummary: any = null;
+      if (reqBodyCopy) {
+        if (Array.isArray(reqBodyCopy.tasks)) {
+          changesSummary = { tasksCount: reqBodyCopy.tasks.length, action: actionType };
+        } else if (reqBodyCopy.taskTitle || reqBodyCopy.title) {
+          changesSummary = { title: reqBodyCopy.taskTitle || reqBodyCopy.title, action: actionType };
+        } else if (responseBody?.stagingProjectId) {
+          changesSummary = { stagingProjectId: responseBody.stagingProjectId, stagingProjectName: responseBody.stagingProjectName };
+        }
+      }
+
+      const logEntry = {
+        id: logId,
+        created_at: startTime,
+        endpoint: reqEndpoint,
+        method: reqMethod,
+        status_code: statusCode,
+        duration_ms: durationMs,
+        project_id: projectId,
+        action_type: actionType,
+        ip_address: ipAddress,
+        user_agent: rawUserAgent,
+        request_query: reqQuery,
+        request_body: reqBodyCopy,
+        response_body: responseBody,
+        error_message: errorMessage,
+        changes_summary: changesSummary
+      };
+
+      // Store in memory for instant local retrieval
+      memApiLogs.unshift(logEntry);
+      if (memApiLogs.length > 200) memApiLogs = memApiLogs.slice(0, 200);
+
+      // Persist to Supabase api_logs table asynchronously
+      if (supabase) {
+        supabase.from('api_logs').insert(logEntry).then(({ error }: any) => {
+          if (error) {
+            // Silence if table is still being created
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  });
+
+  next();
+});
+
+// GET /api/logs - Optimized list of API access logs (Lightweight metadata with pagination)
+app.get('/api/logs', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 30, 100);
+    const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+    const search = (req.query.search as string || '').toLowerCase().trim();
+    const method = (req.query.method as string || '').toUpperCase();
+    const status = req.query.status as string;
+
+    const lightweightCols = 'id, endpoint, method, status_code, duration_ms, project_id, action_type, ip_address, user_agent, created_at, error_message, changes_summary';
+
+    if (supabase) {
+      let query = supabase.from('api_logs').select(lightweightCols, { count: 'exact' }).order('created_at', { ascending: false });
+      if (method && method !== 'ALL') {
+        query = query.eq('method', method);
+      }
+      if (status === 'success') {
+        query = query.gte('status_code', 200).lt('status_code', 400);
+      } else if (status === 'error') {
+        query = query.gte('status_code', 400);
+      }
+
+      query = query.range(offset, offset + limit - 1);
+      const { data, count, error } = await query;
+      if (!error && data) {
+        let filtered = data;
+        if (search) {
+          filtered = filtered.filter((l: any) => 
+            l.endpoint?.toLowerCase().includes(search) ||
+            l.action_type?.toLowerCase().includes(search) ||
+            l.method?.toLowerCase().includes(search) ||
+            (l.project_id && l.project_id.toLowerCase().includes(search)) ||
+            (l.error_message && l.error_message.toLowerCase().includes(search))
+          );
+        }
+        const total = count !== null ? count : filtered.length;
+        const hasMore = offset + data.length < (count ?? 0);
+        return res.json({ logs: filtered, total, hasMore, source: 'supabase' });
+      }
+    }
+
+    // Fallback to memory logs if DB table is empty or error
+    let filteredMem = memApiLogs.map(l => ({
+      id: l.id,
+      endpoint: l.endpoint,
+      method: l.method,
+      status_code: l.status_code,
+      duration_ms: l.duration_ms,
+      project_id: l.project_id,
+      action_type: l.action_type,
+      ip_address: l.ip_address,
+      user_agent: l.user_agent,
+      created_at: l.created_at,
+      error_message: l.error_message,
+      changes_summary: l.changes_summary
+    }));
+
+    if (method && method !== 'ALL') {
+      filteredMem = filteredMem.filter(l => l.method === method);
+    }
+    if (status === 'success') {
+      filteredMem = filteredMem.filter(l => l.status_code >= 200 && l.status_code < 400);
+    } else if (status === 'error') {
+      filteredMem = filteredMem.filter(l => l.status_code >= 400);
+    }
+    if (search) {
+      filteredMem = filteredMem.filter(l => 
+        l.endpoint?.toLowerCase().includes(search) ||
+        l.action_type?.toLowerCase().includes(search) ||
+        l.method?.toLowerCase().includes(search) ||
+        (l.project_id && l.project_id.toLowerCase().includes(search)) ||
+        (l.error_message && l.error_message.toLowerCase().includes(search))
+      );
+    }
+
+    const total = filteredMem.length;
+    const paginated = filteredMem.slice(offset, offset + limit);
+    const hasMore = offset + paginated.length < total;
+
+    res.json({ logs: paginated, total, hasMore, source: 'memory' });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch logs", details: err?.message });
+  }
+});
+
+// GET /api/logs/:id - Fetch complete log details on-demand (lazy payload inspection)
+app.get('/api/logs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check memory first
+    const memLog = memApiLogs.find(l => l.id === id);
+    if (memLog && memLog.request_body !== undefined) {
+      return res.json({ log: memLog });
+    }
+
+    // Query Supabase for full record
+    if (supabase) {
+      const { data, error } = await supabase.from('api_logs').select('*').eq('id', id).single();
+      if (!error && data) {
+        return res.json({ log: data });
+      }
+    }
+
+    if (memLog) {
+      return res.json({ log: memLog });
+    }
+
+    res.status(404).json({ error: "API log not found" });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch log details", details: err?.message });
+  }
+});
+
+// DELETE /api/logs - Clear all API logs
+app.delete('/api/logs', async (req, res) => {
+  try {
+    memApiLogs = [];
+    if (supabase) {
+      await supabase.from('api_logs').delete().neq('id', 'placeholder_impossible_id');
+    }
+    res.json({ success: true, message: "API logs cleared successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to clear logs", details: err?.message });
+  }
+});
+
+// DELETE /api/logs/:id - Delete single API log
+app.delete('/api/logs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    memApiLogs = memApiLogs.filter(l => l.id !== id);
+    if (supabase) {
+      await supabase.from('api_logs').delete().eq('id', id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete log", details: err?.message });
+  }
+});
 
 // Middleware to check API key
 const checkApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -257,6 +548,31 @@ app.get("/api/projects/summary", checkApiKey, async (req, res) => {
   }
 });
 
+async function recordApiVersionBackup(params: {
+  action: string;
+  description: string;
+  prodProjectId: string | null;
+  stagingProjectId: string | null;
+  stateBefore?: any;
+  stateAfter?: any;
+}) {
+  try {
+    await supabase.from('version_backups').insert({
+      id: crypto.randomUUID(),
+      action: params.action,
+      description: params.description,
+      prod_project_id: params.prodProjectId || null,
+      staging_project_id: params.stagingProjectId || null,
+      is_undone: false,
+      state_before: params.stateBefore || {},
+      state_after: params.stateAfter || {},
+      created_at: Date.now()
+    });
+  } catch (err) {
+    console.warn("Failed to record api version backup:", err);
+  }
+}
+
 app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
   try {
     const { projectId } = req.body;
@@ -293,6 +609,15 @@ app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
       const { error: insertTasksError } = await supabase.from('tasks').insert(duplicatedTasksParams);
       if (insertTasksError) throw insertTasksError;
     }
+
+    await recordApiVersionBackup({
+      action: 'clone_project',
+      description: `Created Staging Replica of "${projectData.name}" via AI`,
+      prodProjectId: projectData.id,
+      stagingProjectId: newProjectId,
+      stateBefore: { projects: [projectData], tasks: sourceTasks || [] },
+      stateAfter: { projects: [projectData, newProject], tasks: sourceTasks || [] }
+    });
 
     res.json({ id: newProject.id, name: newProject.name });
   } catch (err) {
@@ -394,6 +719,15 @@ app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
 
     memTasks = await fetchTasksFromDB();
 
+    await recordApiVersionBackup({
+      action: 'merge',
+      description: isAll ? `Merged all changes from staging into production` : `Merged selected changes into production`,
+      prodProjectId,
+      stagingProjectId,
+      stateBefore: {},
+      stateAfter: {}
+    });
+
     res.json({ success: true, message: "Merge completed." });
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
@@ -475,6 +809,15 @@ app.post("/api/ai/reject-staging", checkApiKey, async (req, res) => {
     }
 
     memTasks = await fetchTasksFromDB();
+
+    await recordApiVersionBackup({
+      action: 'reject',
+      description: isAll ? `Rejected all staging changes` : `Rejected selected staging changes`,
+      prodProjectId,
+      stagingProjectId,
+      stateBefore: {},
+      stateAfter: {}
+    });
 
     res.json({ success: true, message: "Reject completed." });
   } catch (err) {
@@ -651,6 +994,15 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
 
     if (error) throw error;
 
+    await recordApiVersionBackup({
+      action: 'create_task',
+      description: `Created new ${type === 'edge_function' ? 'Edge Function' : 'SQL'} task "${newTask.title || 'Untitled'}" via AI`,
+      prodProjectId: autoStaged ? null : projectId,
+      stagingProjectId: autoStaged ? targetProjectId : (projData.name.endsWith('[STAGING]') ? projectId : null),
+      stateBefore: { projects: [], tasks: [] },
+      stateAfter: { projects: [], tasks: [newTask] }
+    });
+
     if (autoStaged) {
       return res.json({ 
         success: true, 
@@ -725,6 +1077,15 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
     const { error } = await supabase.from('tasks').update(taskUpdates).eq('id', targetTaskId);
 
     if (error) throw error;
+
+    await recordApiVersionBackup({
+      action: 'update_task',
+      description: `Updated task "${taskUpdates.title || 'Task'}" via AI`,
+      prodProjectId: autoStaged ? null : existingTask.project_id,
+      stagingProjectId: autoStaged ? targetProjectId : (projData.name.endsWith('[STAGING]') ? existingTask.project_id : null),
+      stateBefore: { projects: [], tasks: [] },
+      stateAfter: { projects: [], tasks: [{ id: targetTaskId, ...taskUpdates }] }
+    });
 
     if (autoStaged) {
       return res.json({ 

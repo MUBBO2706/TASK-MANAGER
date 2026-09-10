@@ -84,3 +84,28 @@ export interface VersionBackup {
   stateBefore?: VersionBackupData | null;
   stateAfter?: VersionBackupData | null;
 }
+
+export interface ApiLog {
+  id: string;
+  createdAt: number;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  durationMs: number;
+  projectId?: string | null;
+  actionType?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestQuery?: Record<string, any>;
+  requestBody?: Record<string, any> | null;
+  responseBody?: Record<string, any> | null;
+  errorMessage?: string | null;
+  changesSummary?: {
+    tasksCount?: number;
+    title?: string;
+    action?: string;
+    stagingProjectId?: string;
+    stagingProjectName?: string;
+    [key: string]: any;
+  } | null;
+}

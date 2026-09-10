@@ -48,6 +48,7 @@ import { DebouncedCodeEditor, DebouncedTitleInput } from "./components/SharedUI"
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { VersionControlPage, VersionControlSkeleton } from "./components/version-control";
+import { ApiLogsPage } from "./components/api-logs/ApiLogsPage";
 import SkeletonLoader, { TaskItemSkeleton, EditorSkeleton } from "./components/SkeletonLoader";
 import DiffViewerSkeleton, { NoChangesDiffSkeleton } from "./components/DiffViewerSkeleton";
 import { SqlTask, Project, ProjectSummary, VersionBackup, VersionBackupData, VersionAction } from "./types";
@@ -275,6 +276,7 @@ export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isDiffParam = searchParams.get("diff") === "true";
   const isVersionControlParam = searchParams.get("versionControl") === "true" || Boolean(searchParams.get("versionId"));
+  const isApiLogsParam = searchParams.get("apiLogs") === "true";
 
   const [tasks, setTasks] = useState<SqlTask[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -628,6 +630,14 @@ export default function App() {
       setShowVersionHistory(isVersionControlParam);
     }
   }, [isVersionControlParam]);
+
+  const [showApiLogs, setShowApiLogs] = useState(isApiLogsParam);
+
+  useEffect(() => {
+    if (isApiLogsParam !== showApiLogs) {
+      setShowApiLogs(isApiLogsParam);
+    }
+  }, [isApiLogsParam]);
   const [confirmMerge, setConfirmMerge] = useState(false);
 
   const handleRestoreBackup = async (backup: any, type: 'undo' | 'redo') => {
@@ -3787,6 +3797,24 @@ export default function App() {
                           Version Control
                         </button>
                         
+                        <div className="h-px bg-slate-100 dark:bg-zinc-900 my-1" />
+
+                        <button
+                          onClick={() => {
+                            setShowApiLogs(true);
+                            setSearchParams(prev => {
+                              const next = new URLSearchParams(prev);
+                              next.set("apiLogs", "true");
+                              return next;
+                            }, { replace: true });
+                            setIsMoreMenuOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-zinc-900 transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                          <Terminal size={14} className="text-emerald-500" />
+                          API Access Logs
+                        </button>
+                        
 
                       </div>
                     </div>
@@ -4786,6 +4814,19 @@ export default function App() {
         onDeleteBackups={handleDeleteVersionBackups}
         sidebarWidth={versionSidebarWidth}
         onSidebarWidthChange={setVersionSidebarWidth}
+      />
+
+      {/* Dedicated API Access Logs Full View Page */}
+      <ApiLogsPage
+        isOpen={showApiLogs}
+        onClose={() => {
+          setShowApiLogs(false);
+          setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.delete("apiLogs");
+            return next;
+          }, { replace: true });
+        }}
       />
 
       {/* Confirmation Modal for Merge to Prod from More Menu */}
