@@ -27,7 +27,7 @@ import {
 import { cn } from "../../lib/utils";
 import { Project, VersionBackup } from "../../types";
 import { VersionDetailView, getActionBadgeConfig } from "./VersionDetailView";
-import VersionControlSkeleton, { VersionTimelineSkeleton } from "./VersionControlSkeleton";
+import VersionControlSkeleton, { VersionTimelineSkeleton, VersionDetailSkeleton } from "./VersionControlSkeleton";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
 import { groupBackupsSequentially, ConsolidatedBackupGroup } from "./consolidation";
@@ -321,17 +321,43 @@ export function VersionControlPage({
     return enhancedVersionBackups.find((b) => b.id === selectedVersionId) || null;
   }, [enhancedVersionBackups, selectedVersionId]);
 
+  // Check if any item in the selected group (or selectedVersion) needs details loaded
+  const isDetailsPending = useMemo(() => {
+    if (!selectedVersionId) return false;
+
+    // If version backups list is loaded and selectedVersionId is not in it, it does not exist
+    if (versionBackups.length > 0 && !versionBackups.some((b) => b.id === selectedVersionId)) {
+      return false;
+    }
+
+    const targetGroup = selectedVersionGroup || (selectedVersion ? [selectedVersion] : null);
+    if (targetGroup && targetGroup.length > 0) {
+      return targetGroup.some((item) => {
+        const hasInCache = item.id in loadedDetails;
+        const hasBefore = hasInCache ? !!loadedDetails[item.id]?.stateBefore : !!item.stateBefore;
+        const hasAfter = hasInCache ? !!loadedDetails[item.id]?.stateAfter : !!item.stateAfter;
+        return !hasInCache && !hasBefore && !hasAfter;
+      });
+    }
+
+    // If versionBackups is still loading / empty
+    return true;
+  }, [selectedVersionId, versionBackups, selectedVersionGroup, selectedVersion, loadedDetails]);
+
+  const isDetailLoading = detailLoading || isDetailsPending;
+
   // Dynamically load detailed backups when a version group is selected
   useEffect(() => {
-    if (!selectedVersionGroup || selectedVersionGroup.length === 0) return;
+    const targetGroup = selectedVersionGroup || (selectedVersion ? [selectedVersion] : null);
+    if (!targetGroup || targetGroup.length === 0) return;
 
-    // Check if any item in the selected group needs details loaded
-    const missingIds = selectedVersionGroup
+    // Check if any item in the target group needs details loaded
+    const missingIds = targetGroup
       .filter(item => {
-        const cached = loadedDetails[item.id];
-        const hasBefore = cached ? !!cached.stateBefore : !!item.stateBefore;
-        const hasAfter = cached ? !!cached.stateAfter : !!item.stateAfter;
-        return !hasBefore && !hasAfter;
+        const hasInCache = item.id in loadedDetails;
+        const hasBefore = hasInCache ? !!loadedDetails[item.id]?.stateBefore : !!item.stateBefore;
+        const hasAfter = hasInCache ? !!loadedDetails[item.id]?.stateAfter : !!item.stateAfter;
+        return !hasInCache && !hasBefore && !hasAfter;
       })
       .map(item => item.id);
 
@@ -348,19 +374,32 @@ export function VersionControlPage({
         if (!res.ok) throw new Error("Failed to fetch version backup details");
 
         const data = await res.json();
+        const fallbackObj: Record<string, { stateBefore: any; stateAfter: any }> = {};
+        missingIds.forEach(id => {
+          fallbackObj[id] = data[id] || { stateBefore: null, stateAfter: null };
+        });
+
         setLoadedDetails(prev => ({
           ...prev,
-          ...data
+          ...fallbackObj
         }));
       } catch (err) {
         console.error("Error lazy-loading version backup details:", err);
+        const fallbackObj: Record<string, { stateBefore: any; stateAfter: any }> = {};
+        missingIds.forEach(id => {
+          fallbackObj[id] = { stateBefore: null, stateAfter: null };
+        });
+        setLoadedDetails(prev => ({
+          ...prev,
+          ...fallbackObj
+        }));
       } finally {
         setDetailLoading(false);
       }
     };
 
     fetchDetails();
-  }, [selectedVersionGroup, loadedDetails]);
+  }, [selectedVersionGroup, selectedVersion, loadedDetails]);
 
   const handleSelectVersion = (version: VersionBackup) => {
     setSelectedVersionId(version.id);
@@ -862,33 +901,57 @@ export function VersionControlPage({
             isResizing && "pointer-events-none select-none"
           )}
         >
-          <VersionDetailView
-            versionGroup={selectedVersionGroup}
-            currentGroup={selectedGroup}
-            currentProjects={currentProjects}
-            activeProjectId={activeProjectId}
-            onBack={() => {
-              if (isDesktop) {
-                setSelectedVersionId(null);
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.delete("versionId");
-                  return next;
-                }, { replace: true });
-              } else {
-                setShowDetailMobile(false);
-                setSelectedVersionId(null);
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.delete("versionId");
-                  return next;
-                }, { replace: true });
-              }
-            }}
-            onRestore={handleRestore}
-            isRestoring={isRestoring}
-            detailLoading={detailLoading}
-          />
+          {isDetailLoading && selectedVersionId ? (
+            <VersionDetailSkeleton
+              isMobile={!isDesktop}
+              onBack={() => {
+                if (isDesktop) {
+                  setSelectedVersionId(null);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.delete("versionId");
+                    return next;
+                  }, { replace: true });
+                } else {
+                  setShowDetailMobile(false);
+                  setSelectedVersionId(null);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.delete("versionId");
+                    return next;
+                  }, { replace: true });
+                }
+              }}
+            />
+          ) : (
+            <VersionDetailView
+              versionGroup={selectedVersionGroup}
+              currentGroup={selectedGroup}
+              currentProjects={currentProjects}
+              activeProjectId={activeProjectId}
+              onBack={() => {
+                if (isDesktop) {
+                  setSelectedVersionId(null);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.delete("versionId");
+                    return next;
+                  }, { replace: true });
+                } else {
+                  setShowDetailMobile(false);
+                  setSelectedVersionId(null);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.delete("versionId");
+                    return next;
+                  }, { replace: true });
+                }
+              }}
+              onRestore={handleRestore}
+              isRestoring={isRestoring}
+              detailLoading={isDetailLoading}
+            />
+          )}
         </div>
       </div>
 

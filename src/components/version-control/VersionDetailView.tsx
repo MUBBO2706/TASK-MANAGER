@@ -40,6 +40,7 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useHybridState } from "../../hooks/useHybridState";
 import { ConsolidatedBackupGroup } from "./consolidation";
 import { DiffCodeSkeleton, CodeBlockSkeleton } from "../DiffViewerSkeleton";
+import { VersionDetailSkeleton } from "./VersionControlSkeleton";
 
 interface VersionDetailViewProps {
   versionGroup?: VersionBackup[] | null;
@@ -201,6 +202,16 @@ export function VersionDetailView({
   detailLoading = false,
   activeProjectId,
 }: VersionDetailViewProps) {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 768 : true
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const [taskSearch, setTaskSearch] = useLocalStorage("version-detail-task-search", "");
   const [selectedTaskTab, setSelectedTaskTab] = useHybridState<"all" | "sql" | "edge">("vTaskTab", "all");
   const [activeViewTab, setActiveViewTab] = useHybridState<"diff" | "snapshot">("vViewTab", "diff");
@@ -386,7 +397,6 @@ export function VersionDetailView({
   // But wait! Only do this on mobile if we want desktop to NOT pre-select?
   // User says: "jab desktop mein koi version control open kare to task pehle se selected na ho iska behaviour same SQL and function ke selection ki tarah ho"
   useEffect(() => {
-    const isDesktop = typeof window !== 'undefined' ? window.innerWidth >= 768 : true;
     if (!isDesktop && modifiedTaskDiffs.length > 0) {
       setExpandedDiffId(modifiedTaskDiffs[0].task.id);
     } else {
@@ -395,16 +405,18 @@ export function VersionDetailView({
     setExpandedAddedId(null);
     setExpandedRemovedId(null);
     setExpandedTaskId(null);
-  }, [version?.id, detailLoading]);
+  }, [version?.id, detailLoading, isDesktop]);
+
+  if (detailLoading) {
+    return (
+      <VersionDetailSkeleton
+        isMobile={!isDesktop}
+        onBack={onBack}
+      />
+    );
+  }
 
   if (!version) {
-    if (detailLoading) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center h-full bg-white dark:bg-black">
-          <Loader size={28} className="animate-spin text-slate-400 dark:text-zinc-500" />
-        </div>
-      );
-    }
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-slate-50/50 dark:bg-black/50 p-6 sm:p-8 text-center">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-600 mb-4 border border-slate-200 dark:border-zinc-800">
