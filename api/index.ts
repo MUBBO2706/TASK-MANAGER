@@ -34,18 +34,36 @@ let memApiLogs: any[] = [];
 
 // Interceptor middleware to capture and log external API requests and responses
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Only log /api routes and ignore /api/logs self-fetch to prevent log recursion loops
-  if (!req.url.startsWith('/api') || req.url.startsWith('/api/logs')) {
+  const isApiRoute = req.url.startsWith('/api') && !req.url.startsWith('/api/logs');
+  const isExportRoute = req.url.startsWith('/export.json');
+
+  if (!isApiRoute && !isExportRoute) {
     return next();
   }
 
   // Filter out internal in-app requests:
-  // Requests originating from the internal React browser UI must NOT be logged in API access logs.
   // ONLY external server/client calls (e.g. cURL, Python scripts, Postman, AI Agents, or calls with x-api-key / Authorization) are logged.
-  const hasApiKey = Boolean(req.headers['x-api-key'] || req.query?.api_key || req.headers['authorization']);
+  let requestBodyCopy: any = null;
+  if (req.body && typeof req.body === 'object') {
+    try {
+      requestBodyCopy = JSON.parse(JSON.stringify(req.body));
+    } catch (_) {
+      requestBodyCopy = req.body;
+    }
+  }
+
+  const hasApiKey = Boolean(
+    req.headers['x-api-key'] || 
+    req.query?.api_key || 
+    req.headers['authorization'] ||
+    (requestBodyCopy && requestBodyCopy.apiKey) ||
+    (requestBodyCopy && requestBodyCopy.api_key)
+  );
+
   const isInAppHeader = req.headers['x-in-app'] === 'true' || req.headers['x-client-app'] === 'react-task-master';
   const secFetchSite = req.headers['sec-fetch-site'];
   const userAgent = ((req.headers['user-agent'] as string) || '').toLowerCase();
+  
   const isExternalToolUserAgent = 
     userAgent.includes('curl') || 
     userAgent.includes('postman') || 
@@ -58,7 +76,16 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
     userAgent.includes('agent') ||
     userAgent.includes('rest-client');
 
-  if (isInAppHeader || (!hasApiKey && !isExternalToolUserAgent && secFetchSite === 'same-origin')) {
+  // If it clearly has an in-app header, it's internal.
+  if (isInAppHeader) {
+    return next();
+  }
+
+  // A request is considered EXTERNAL if it has an API key OR an external tool user agent.
+  // If it's just a regular browser navigation/fetch from our app without API key, it's internal.
+  const isExternal = hasApiKey || (isExternalToolUserAgent && secFetchSite !== 'same-origin');
+
+  if (!isExternal) {
     return next();
   }
 
@@ -72,14 +99,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
   const rawUserAgent = (req.headers['user-agent'] as string) || 'Unknown External Client';
 
   // Make safe copy of request body
-  let reqBodyCopy: any = null;
-  if (req.body && typeof req.body === 'object') {
-    try {
-      reqBodyCopy = JSON.parse(JSON.stringify(req.body));
-    } catch (_) {
-      reqBodyCopy = req.body;
-    }
-  }
+  let reqBodyCopy: any = requestBodyCopy;
 
   // Intercept outgoing response
   const originalJson = res.json;
