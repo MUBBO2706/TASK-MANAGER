@@ -1564,7 +1564,26 @@ export default function App() {
     if (task && task.isContentFetched) return;
     if (fetchingTaskContentIdsRef.current.has(taskId)) return;
 
-    fetchingTaskContentIdsRef.current.add(taskId);
+    // Find all related tasks (itself + parent + children) to keep diffs synchronized
+    const queryIds = new Set<string>();
+    queryIds.add(taskId);
+    if (task?.productionTaskId) {
+      queryIds.add(task.productionTaskId);
+    }
+    tasksRef.current.forEach(t => {
+      if (t.productionTaskId === taskId || (task?.productionTaskId && t.productionTaskId === task.productionTaskId)) {
+        queryIds.add(t.id);
+      }
+    });
+
+    const idsToFetch = Array.from(queryIds).filter(id => {
+      const t = tasksRef.current.find(x => x.id === id);
+      return t && !t.isContentFetched && !fetchingTaskContentIdsRef.current.has(id);
+    });
+
+    if (idsToFetch.length === 0) return;
+
+    idsToFetch.forEach(id => fetchingTaskContentIdsRef.current.add(id));
     if (!isSilent) {
       setLoadingTaskContentId(taskId);
     }
@@ -1573,18 +1592,18 @@ export default function App() {
       const { data, error } = await supabase
         .from('tasks')
         .select('id, sql, function_code, edge_files, edge_secrets')
-        .eq('id', taskId)
-        .single();
+        .in('id', idsToFetch);
 
       if (!error && data) {
         setTasks(prev => prev.map(t => {
-          if (t.id === taskId) {
+          const fetchedData = data.find(d => d.id === t.id);
+          if (fetchedData) {
             return {
               ...t,
-              sql: data.sql ?? t.sql ?? '',
-              functionCode: data.function_code ?? t.functionCode ?? '',
-              edgeFiles: data.edge_files ?? t.edgeFiles ?? [],
-              edgeSecrets: data.edge_secrets ?? t.edgeSecrets ?? [],
+              sql: fetchedData.sql ?? t.sql ?? '',
+              functionCode: fetchedData.function_code ?? t.functionCode ?? '',
+              edgeFiles: fetchedData.edge_files ?? t.edgeFiles ?? [],
+              edgeSecrets: fetchedData.edge_secrets ?? t.edgeSecrets ?? [],
               isContentFetched: true,
             };
           }
@@ -1594,7 +1613,7 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to fetch full task content", err);
     } finally {
-      fetchingTaskContentIdsRef.current.delete(taskId);
+      idsToFetch.forEach(id => fetchingTaskContentIdsRef.current.delete(id));
       setLoadingTaskContentId(prev => (prev === taskId ? null : prev));
     }
   };
@@ -2913,34 +2932,60 @@ export default function App() {
           const changedFiles: string[] = [];
           let hasSecretsChanged = false;
 
-          if (st.type === 'edge_function') {
-            const stFilesStr = JSON.stringify(st.edgeFiles?.map(f => ({ n: f.name, c: f.code })) || []);
-            const ptFilesStr = JSON.stringify(pt.edgeFiles?.map(f => ({ n: f.name, c: f.code })) || []);
-            if (stFilesStr !== ptFilesStr) {
-               isModified = true;
-               const sfMap = new Map((st.edgeFiles || []).map(f => [f.name, f.code]));
-               const ptMap = new Map((pt.edgeFiles || []).map(f => [f.name, f.code]));
-               
-               (st.edgeFiles || []).forEach(sf => {
-                 if (!ptMap.has(sf.name) || ptMap.get(sf.name) !== sf.code) {
-                   if (!changedFiles.includes(sf.name)) changedFiles.push(sf.name);
-                 }
-               });
-               (pt.edgeFiles || []).forEach(pf => {
-                 if (!sfMap.has(pf.name)) {
-                   if (!changedFiles.includes(pf.name)) changedFiles.push(pf.name);
-                 }
-               });
+          const areStringsEffectivelyEqual = (s1: string, s2: string, fetched1: boolean, fetched2: boolean) => {
+            if (s1 === s2) return true;
+            if (fetched1 !== fetched2) {
+              const full = fetched1 ? s1 : s2;
+              const preview = fetched1 ? s2 : s1;
+              if (full.startsWith(preview) && preview.length <= 200) {
+                return true;
+              }
             }
-            
-            const stSecretsStr = JSON.stringify(st.edgeSecrets?.map(s => ({ k: s.key, v: s.value })) || []);
-            const ptSecretsStr = JSON.stringify(pt.edgeSecrets?.map(s => ({ k: s.key, v: s.value })) || []);
-            if (stSecretsStr !== ptSecretsStr) {
-                isModified = true;
-                hasSecretsChanged = true;
+            return false;
+          };
+
+          if (st.type === 'edge_function') {
+            if (st.isContentFetched !== pt.isContentFetched) {
+              const fullTask = st.isContentFetched ? st : pt;
+              const previewTask = st.isContentFetched ? pt : st;
+              const fullCode = fullTask.edgeFiles?.[0]?.code || '';
+              const previewCode = previewTask.edgeFiles?.[0]?.code || '';
+              
+              if (!fullCode.startsWith(previewCode) || previewCode.length > 200) {
+                 isModified = true;
+                 changedFiles.push(previewTask.edgeFiles?.[0]?.name || 'Preview');
+              }
+            } else {
+              const stFilesStr = JSON.stringify(st.edgeFiles?.map(f => ({ n: f.name, c: f.code })) || []);
+              const ptFilesStr = JSON.stringify(pt.edgeFiles?.map(f => ({ n: f.name, c: f.code })) || []);
+              if (stFilesStr !== ptFilesStr) {
+                 isModified = true;
+                 const sfMap = new Map((st.edgeFiles || []).map(f => [f.name, f.code]));
+                 const ptMap = new Map((pt.edgeFiles || []).map(f => [f.name, f.code]));
+                 
+                 (st.edgeFiles || []).forEach(sf => {
+                   if (!ptMap.has(sf.name) || ptMap.get(sf.name) !== sf.code) {
+                     if (!changedFiles.includes(sf.name)) changedFiles.push(sf.name);
+                   }
+                 });
+                 (pt.edgeFiles || []).forEach(pf => {
+                   if (!sfMap.has(pf.name)) {
+                     if (!changedFiles.includes(pf.name)) changedFiles.push(pf.name);
+                   }
+                 });
+              }
+              
+              const stSecretsStr = JSON.stringify(st.edgeSecrets?.map(s => ({ k: s.key, v: s.value })) || []);
+              const ptSecretsStr = JSON.stringify(pt.edgeSecrets?.map(s => ({ k: s.key, v: s.value })) || []);
+              if (stSecretsStr !== ptSecretsStr) {
+                  isModified = true;
+                  hasSecretsChanged = true;
+              }
             }
           } else {
-            if (st.sql !== pt.sql) isModified = true;
+            if (!areStringsEffectivelyEqual(st.sql, pt.sql, !!st.isContentFetched, !!pt.isContentFetched)) {
+              isModified = true;
+            }
           }
           if (isModified) {
              count++;
