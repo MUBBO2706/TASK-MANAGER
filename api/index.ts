@@ -1127,6 +1127,52 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
   }
 });
 
+app.delete("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    // First fetch the task to get the project_id
+    const { data: existingTask } = await supabase.from('tasks').select('title, project_id').eq('id', taskId).single();
+    if (!existingTask) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    // Now fetch the project to verify its name
+    const { data: projData } = await supabase.from('projects').select('name').eq('id', existingTask.project_id).single();
+    if (!projData) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    // STRICT STAGING RULE: Do NOT allow deleting tasks from Production projects
+    if (!projData.name.endsWith('[STAGING]')) {
+      return res.status(403).json({ 
+        error: "Forbidden: You are not allowed to delete tasks from a Production project.",
+        message: "Deletions are only permitted within [STAGING] environments. If you want to remove a task from production, you must first create a staging replica, delete the task there, and then merge the changes."
+      });
+    }
+
+    // Proceed with deletion
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+
+    if (error) throw error;
+
+    await recordApiVersionBackup({
+      action: 'delete_task',
+      description: `Deleted task "${existingTask.title || 'Unknown'}" via AI`,
+      prodProjectId: null,
+      stagingProjectId: existingTask.project_id,
+      stateBefore: { projects: [], tasks: [existingTask] },
+      stateAfter: { projects: [], tasks: [] }
+    });
+
+    res.json({ success: true, message: "Task successfully deleted." });
+  } catch (err) {
+    const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Failed to delete task via AI API:", errDetails);
+    res.status(500).json({ error: "Failed to delete task", details: errDetails });
+  }
+});
+
 // Version backups endpoint (Optimized to return only metadata, reducing initial egress by 99%)
 app.get("/api/version-backups", checkApiKey, async (req, res) => {
   try {
