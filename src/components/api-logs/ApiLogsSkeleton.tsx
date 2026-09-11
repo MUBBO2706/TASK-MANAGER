@@ -288,38 +288,19 @@ export function ApiLogsSkeleton({
 
             {/* Filter Pills: Method & Status Skeleton */}
             <div className="flex items-center justify-between gap-1 overflow-x-auto pb-0.5 text-[10.5px]">
-              {/* Method Selectors */}
+              {/* Method Selectors Skeleton */}
               <div className="flex items-center gap-1">
-                {["ALL", "POST", "GET", "DELETE"].map((m, idx) => (
-                  <span
-                    key={m}
-                    className={cn(
-                      "px-1.5 py-0.5 rounded font-mono font-medium",
-                      idx === 0
-                        ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold"
-                        : "bg-slate-200/60 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400"
-                    )}
-                  >
-                    {m}
-                  </span>
-                ))}
+                <div className="w-8 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
+                <div className="w-10 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
+                <div className="w-8 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
+                <div className="w-12 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
               </div>
 
-              {/* Status Selectors */}
+              {/* Status Selectors Skeleton */}
               <div className="flex items-center gap-1">
-                {["All", "2xx", "4xx/5xx"].map((s, idx) => (
-                  <span
-                    key={s}
-                    className={cn(
-                      "px-1.5 py-0.5 rounded font-medium",
-                      idx === 0
-                        ? "bg-emerald-600 text-white font-bold"
-                        : "bg-slate-200/60 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400"
-                    )}
-                  >
-                    {s}
-                  </span>
-                ))}
+                <div className="w-7 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
+                <div className="w-8 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
+                <div className="w-12 h-4.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 animate-pulse" />
               </div>
             </div>
           </div>

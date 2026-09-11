@@ -105,9 +105,17 @@ export function ApiLogsPage({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const isClosingRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      isClosingRef.current = false;
+    }
+  }, [isOpen]);
+
   // Ensure apiLogs param is present in URL when API Logs is open
   useEffect(() => {
-    if (isOpen && searchParams.get("apiLogs") !== "true") {
+    if (isOpen && !isClosingRef.current && searchParams.get("apiLogs") !== "true") {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set("apiLogs", "true");
@@ -130,22 +138,6 @@ export function ApiLogsPage({
       setShowDetailMobile(false);
     }
   }, [urlLogId]);
-
-  // Desktop auto-select fallback: if no URL logId, but lastVisitedLogId exists in loaded logs
-  useEffect(() => {
-    if (isDesktop && !urlLogId && lastVisitedLogId && logs.length > 0) {
-      const exists = logs.some((l) => l.id === lastVisitedLogId);
-      if (exists) {
-        setSelectedLogId(lastVisitedLogId);
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev);
-          next.set("apiLogs", "true");
-          next.set("logId", lastVisitedLogId);
-          return next;
-        }, { replace: true });
-      }
-    }
-  }, [isDesktop, urlLogId, lastVisitedLogId, logs, setSearchParams]);
 
   // Fetch initial batch of lightweight logs
   const fetchLogs = useCallback(async (reset = true, isExplicitRefresh = false) => {
@@ -294,6 +286,7 @@ export function ApiLogsPage({
   };
 
   const handleClosePage = () => {
+    isClosingRef.current = true;
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("apiLogs");
