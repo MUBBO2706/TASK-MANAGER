@@ -704,8 +704,48 @@ app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
       });
     }
 
+    const targetStagingName = `${projectData.name} [STAGING]`;
+
+    // Check if an existing staging branch already exists for this production project to prevent database clutter
+    const { data: existingStaging } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('name', targetStagingName)
+      .maybeSingle();
+
+    if (existingStaging) {
+      const { data: stagingTasks } = await supabase.from('tasks').select('id, type').eq('project_id', existingStaging.id);
+      const stTasks = stagingTasks || [];
+      return res.json({
+        success: true,
+        isReused: true,
+        message: `Existing staging branch '${existingStaging.name}' found and ready for use.`,
+        action: "reuse_staging",
+        stagingProject: {
+          id: existingStaging.id,
+          name: existingStaging.name,
+          createdAt: existingStaging.created_at,
+          isStaging: true
+        },
+        sourceProject: {
+          id: projectData.id,
+          name: projectData.name
+        },
+        summary: {
+          tasksCount: stTasks.length,
+          sqlTasks: stTasks.filter((t: any) => t.type === 'sql' || !t.type).length,
+          edgeFunctions: stTasks.filter((t: any) => t.type === 'edge_function').length
+        },
+        // Backward-compatibility properties
+        id: existingStaging.id,
+        name: existingStaging.name,
+        stagingProjectId: existingStaging.id,
+        stagingProjectName: existingStaging.name
+      });
+    }
+
     const newProjectId = crypto.randomUUID();
-    const newProjectName = `${projectData.name} [STAGING]`;
+    const newProjectName = targetStagingName;
     const newProject = { id: newProjectId, name: newProjectName, created_at: Date.now() };
 
     const { error: insertProjectError } = await supabase.from('projects').insert(newProject);
@@ -1135,6 +1175,25 @@ app.get("/api/listen", checkApiKey, (req, res) => {
 
 app.get("/export.json", checkApiKey, async (req, res) => {
   const projectId = req.query.projectId as string | undefined;
+  if (!projectId) {
+    return res.status(400).json({
+      success: false,
+      error: "BAD_REQUEST",
+      message: "Missing required query parameter 'projectId'.",
+      details: "Please specify the projectId in the query string (e.g., /export.json?projectId=<PROJECT_UUID>) to export tasks for a specific project."
+    });
+  }
+
+  const { data: projData, error: projError } = await supabase.from('projects').select('name').eq('id', projectId).single();
+  if (projError || !projData) {
+    return res.status(404).json({
+      success: false,
+      error: "NOT_FOUND",
+      message: `Project with ID '${projectId}' was not found in the database.`,
+      details: "Verify that the projectId is valid and exists."
+    });
+  }
+
   const data = await fetchTasksFromDB(projectId);
   memTasks = data;
   const sortedTasks = [...data].sort((a: any, b: any) => {
@@ -1149,6 +1208,10 @@ app.get("/export.json", checkApiKey, async (req, res) => {
   const structuredExport = {
     version: "1.0",
     exportDate: new Date().toISOString(),
+    project: {
+      id: projectId,
+      name: projData.name
+    },
     metadata: {
       totalTasks: sortedTasks.length,
       sqlTasksCount: sortedTasks.filter(t => t.type === 'sql' || !t.type).length,
@@ -1202,29 +1265,24 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
       });
     }
 
-    let targetProjectId = projectId;
-    let autoStaged = false;
-    let newProjectName = "";
-
+    // STRICT STAGING RULE: Do NOT allow writing directly to Production projects
     if (!projData.name.endsWith('[STAGING]')) {
-        // Auto-create staging project to prevent direct prod changes!
-        targetProjectId = crypto.randomUUID();
-        newProjectName = `${projData.name} [STAGING]`;
-        await supabase.from('projects').insert({ id: targetProjectId, name: newProjectName, created_at: Date.now() });
-
-        const { data: sourceTasks } = await supabase.from('tasks').select('*').eq('project_id', projectId);
-        if (sourceTasks && sourceTasks.length > 0) {
-            const duplicated = sourceTasks.map((t: any) => ({
-                ...t,
-                id: crypto.randomUUID(),
-                project_id: targetProjectId,
-                production_task_id: t.id,
-                created_at: Date.now(),
-                updated_at: Date.now()
-            }));
-            await supabase.from('tasks').insert(duplicated);
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN",
+        message: `Direct task creation in Production project '${projData.name}' is forbidden.`,
+        details: "Writes are strictly prohibited on production projects for data safety. You must create or use a [STAGING] branch, add your tasks there, and merge into production.",
+        project: {
+          id: projData.id,
+          name: projData.name,
+          isStaging: false
+        },
+        remediation: {
+          step1: "POST /api/ai/create-staging with { projectId: '" + projData.id + "' } to get a stagingProjectId",
+          step2: "POST /api/ai/write with the stagingProjectId",
+          step3: "POST /api/ai/merge-staging to review and merge into production"
         }
-        autoStaged = true;
+      });
     }
 
     const taskType = type || 'sql';
@@ -1240,7 +1298,7 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
       edge_secrets: edgeSecrets || [],
       status: 'pending',
       folder_id: null,
-      project_id: targetProjectId, // Use the target project ID!
+      project_id: projectId,
       created_at: Date.now(),
       updated_at: Date.now(),
       order_index: Date.now()
@@ -1252,34 +1310,23 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
     await recordApiVersionBackup({
       action: 'create_task',
       description: `Created new ${taskType === 'edge_function' ? 'Edge Function' : 'SQL'} task "${taskTitle}" via AI`,
-      prodProjectId: autoStaged ? null : projectId,
-      stagingProjectId: autoStaged ? targetProjectId : (projData.name.endsWith('[STAGING]') ? projectId : null),
+      prodProjectId: null,
+      stagingProjectId: projectId,
       stateBefore: { projects: [], tasks: [] },
       stateAfter: { projects: [], tasks: [newTask] }
     });
 
-    const activeProjectName = autoStaged ? newProjectName : projData.name;
-
     const responsePayload = {
       success: true,
-      message: autoStaged
-        ? `Direct write to Production project '${projData.name}' was intercepted for safety. Created Staging branch '${newProjectName}' and added task '${taskTitle}'.`
-        : `Task '${taskTitle}' successfully created in project '${projData.name}'.`,
+      message: `Task '${taskTitle}' successfully created in staging project '${projData.name}'.`,
       action: "create_task",
-      autoStaged,
       task: newTask,
       data: newTask,
       project: {
-        id: targetProjectId,
-        name: activeProjectName,
-        isStaging: autoStaged || projData.name.endsWith('[STAGING]')
+        id: projData.id,
+        name: projData.name,
+        isStaging: true
       },
-      ...(autoStaged ? {
-        stagingProject: {
-          id: targetProjectId,
-          name: newProjectName
-        }
-      } : {}),
       summary: {
         taskId: newTask.id,
         title: newTask.title,
@@ -1329,35 +1376,25 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
       });
     }
 
-    let targetTaskId = taskId;
-    let autoStaged = false;
-    let newProjectName = "";
-    let targetProjectId = existingTask.project_id;
-
+    // STRICT STAGING RULE: Do NOT allow direct updates to tasks in Production projects
     if (!projData.name.endsWith('[STAGING]')) {
-        targetProjectId = crypto.randomUUID();
-        newProjectName = `${projData.name} [STAGING]`;
-        await supabase.from('projects').insert({ id: targetProjectId, name: newProjectName, created_at: Date.now() });
-
-        const { data: sourceTasks } = await supabase.from('tasks').select('*').eq('project_id', existingTask.project_id);
-        if (sourceTasks && sourceTasks.length > 0) {
-            const duplicated = sourceTasks.map((t: any) => {
-                const newId = crypto.randomUUID();
-                if (t.id === taskId) {
-                   targetTaskId = newId;
-                }
-                return {
-                    ...t,
-                    id: newId,
-                    project_id: targetProjectId,
-                    production_task_id: t.id,
-                    created_at: Date.now(),
-                    updated_at: Date.now()
-                };
-            });
-            await supabase.from('tasks').insert(duplicated);
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN",
+        message: `Direct modification of task '${existingTask.title || taskId}' in Production project '${projData.name}' is forbidden.`,
+        details: "Task updates are strictly restricted to [STAGING] environments to protect production stability. Please create a staging replica of this project first, apply the updates in staging, and merge when ready.",
+        task: {
+          id: existingTask.id,
+          title: existingTask.title,
+          projectId: existingTask.project_id,
+          projectName: projData.name
+        },
+        remediation: {
+          step1: "POST /api/ai/create-staging with { projectId: '" + existingTask.project_id + "' } to get a staging replica",
+          step2: "PUT /api/ai/write/<stagingTaskId> within the newly created staging replica",
+          step3: "POST /api/ai/merge-staging to review diffs and merge into production"
         }
-        autoStaged = true;
+      });
     }
 
     const taskUpdates: any = { updated_at: Date.now() };
@@ -1369,7 +1406,7 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
     if (edgeFiles !== undefined) taskUpdates.edge_files = edgeFiles;
     if (edgeSecrets !== undefined) taskUpdates.edge_secrets = edgeSecrets;
 
-    const { error } = await supabase.from('tasks').update(taskUpdates).eq('id', targetTaskId);
+    const { error } = await supabase.from('tasks').update(taskUpdates).eq('id', taskId);
     if (error) throw error;
 
     const finalTitle = taskUpdates.title || existingTask.title || 'Task';
@@ -1377,37 +1414,26 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
     await recordApiVersionBackup({
       action: 'update_task',
       description: `Updated task "${finalTitle}" via AI`,
-      prodProjectId: autoStaged ? null : existingTask.project_id,
-      stagingProjectId: autoStaged ? targetProjectId : (projData.name.endsWith('[STAGING]') ? existingTask.project_id : null),
+      prodProjectId: null,
+      stagingProjectId: existingTask.project_id,
       stateBefore: { projects: [], tasks: [existingTask] },
-      stateAfter: { projects: [], tasks: [{ id: targetTaskId, ...existingTask, ...taskUpdates }] }
+      stateAfter: { projects: [], tasks: [{ id: taskId, ...existingTask, ...taskUpdates }] }
     });
 
-    const activeProjectName = autoStaged ? newProjectName : projData.name;
     const modifiedFields = Object.keys(taskUpdates).filter(k => k !== 'updated_at');
 
     const responsePayload = {
       success: true,
-      message: autoStaged
-        ? `Direct modification of task in Production project '${projData.name}' was intercepted for safety. Created Staging branch '${newProjectName}' with replicated task '${targetTaskId}' updated.`
-        : `Task '${finalTitle}' successfully updated in project '${projData.name}'.`,
+      message: `Task '${finalTitle}' successfully updated in staging project '${projData.name}'.`,
       action: "update_task",
-      autoStaged,
-      taskId: targetTaskId,
-      task: { id: targetTaskId, ...existingTask, ...taskUpdates },
-      data: { id: targetTaskId, ...existingTask, ...taskUpdates },
+      taskId: taskId,
+      task: { id: taskId, ...existingTask, ...taskUpdates },
+      data: { id: taskId, ...existingTask, ...taskUpdates },
       project: {
-        id: targetProjectId,
-        name: activeProjectName,
-        isStaging: autoStaged || projData.name.endsWith('[STAGING]')
+        id: projData.id,
+        name: projData.name,
+        isStaging: true
       },
-      ...(autoStaged ? {
-        stagingProject: {
-          id: targetProjectId,
-          name: newProjectName
-        },
-        newTaskId: targetTaskId
-      } : {}),
       summary: {
         fieldsModified: modifiedFields,
         updatedAt: taskUpdates.updated_at
