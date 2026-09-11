@@ -4,7 +4,8 @@ import {
   Search, 
   Trash2, 
   Download, 
-  RefreshCw, 
+  RefreshCw,
+  RotateCw,
   X, 
   ChevronLeft, 
   ChevronRight, 
@@ -261,12 +262,12 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
   const handleClearLogs = async () => {
     setIsClearing(true);
     try {
-      await fetch("/api/logs", {
+      const res = await fetch("/api/logs", {
         method: "DELETE",
         headers: { "x-in-app": "true" }
       });
-      if (supabase) {
-        await supabase.from("api_logs").delete().neq("id", "placeholder_impossible");
+      if (!res.ok) {
+        throw new Error(await res.text());
       }
       setLogs([]);
       setLoadedDetails({});
@@ -432,19 +433,12 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:text-slate-950 dark:hover:text-white bg-transparent border border-slate-200 dark:border-zinc-800 rounded-md hover:bg-slate-100/70 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer rounded-md"
           >
-            <ChevronLeft size={14} className="shrink-0" />
-            <span className="hidden sm:inline">Back to Workspace</span>
-            <span className="sm:hidden">Back</span>
+            <ChevronLeft size={18} className="shrink-0" />
           </button>
 
-          <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 hidden sm:block" />
-
           <div className="flex items-center gap-2 min-w-0">
-            <div className="p-1 rounded bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <Terminal size={15} className="stroke-[2.2]" />
-            </div>
             <div className="flex items-center gap-2">
               <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
                 External API Logs
@@ -489,41 +483,30 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
             type="button"
             onClick={() => fetchLogs(true)}
             disabled={isLoading}
-            className="p-1.5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-md border border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer"
             title="Refresh Logs"
           >
-            <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
+            {isLoading ? <Loader size={15} className="animate-spin" /> : <RotateCw size={15} />}
           </button>
 
           <button
             type="button"
             onClick={handleExportLogs}
             disabled={logs.length === 0}
-            className="p-1.5 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-md border border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-900 transition-colors disabled:opacity-40 cursor-pointer hidden sm:inline-flex"
+            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors disabled:opacity-40 cursor-pointer hidden sm:inline-flex"
             title="Export JSON"
           >
-            <Download size={13} />
+            <Download size={15} />
           </button>
 
           <button
             type="button"
             onClick={() => setShowClearConfirmModal(true)}
             disabled={logs.length === 0}
-            className="p-1.5 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 rounded-md border border-slate-200 dark:border-zinc-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-40 cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 transition-colors disabled:opacity-40 cursor-pointer"
             title="Clear Logs"
           >
-            <Trash2 size={13} />
-          </button>
-
-          <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 mx-0.5" />
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer"
-            title="Close"
-          >
-            <X size={15} />
+            <Trash2 size={15} />
           </button>
         </div>
       </header>

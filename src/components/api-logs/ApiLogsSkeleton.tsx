@@ -129,23 +129,16 @@ export function ApiLogsSkeleton({
       {/* Top Header Skeleton */}
       <header className="flex-shrink-0 h-12 px-3 sm:px-4 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between gap-2 z-20">
         {/* Left: Back button & Title Skeleton */}
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300 bg-transparent border border-slate-200 dark:border-zinc-800 rounded-md"
+            className="inline-flex items-center justify-center p-1.5 text-slate-500 bg-transparent rounded-md"
           >
-            <ChevronLeft size={14} />
-            <span className="hidden sm:inline">Back to Workspace</span>
-            <span className="sm:hidden">Back</span>
+            <ChevronLeft size={18} />
           </button>
 
-          <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 hidden sm:block" />
-
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <Terminal size={15} />
-            </div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white">API Access Logs</h1>
             <div className="h-4 w-18 bg-emerald-500/10 rounded-full hidden sm:block animate-pulse" />
           </div>
@@ -161,16 +154,9 @@ export function ApiLogsSkeleton({
 
         {/* Right: Actions Skeleton */}
         <div className="flex items-center gap-1.5">
-          <div className="h-7 w-7 bg-slate-100 dark:bg-zinc-900 rounded-md border border-slate-200 dark:border-zinc-800 animate-pulse" />
-          <div className="h-7 w-7 bg-slate-100 dark:bg-zinc-900 rounded-md border border-slate-200 dark:border-zinc-800 animate-pulse hidden sm:block" />
-          <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 mx-1" />
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            <X size={16} />
-          </button>
+          <div className="h-7 w-7 bg-slate-100 dark:bg-zinc-900 rounded-md animate-pulse" />
+          <div className="h-7 w-7 bg-slate-100 dark:bg-zinc-900 rounded-md animate-pulse hidden sm:block" />
+          <div className="h-7 w-7 bg-slate-100 dark:bg-zinc-900 rounded-md animate-pulse" />
         </div>
       </header>
 

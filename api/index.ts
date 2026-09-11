@@ -322,7 +322,11 @@ app.delete('/api/logs', async (req, res) => {
   try {
     memApiLogs = [];
     if (supabase) {
-      await supabase.from('api_logs').delete().neq('id', 'placeholder_impossible_id');
+      const { error } = await supabase.from('api_logs').delete().not('id', 'is', null);
+      if (error) {
+        console.error("Supabase delete all logs error:", error);
+        throw error;
+      }
     }
     res.json({ success: true, message: "API logs cleared successfully" });
   } catch (err: any) {
