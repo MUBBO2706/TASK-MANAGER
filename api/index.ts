@@ -418,7 +418,12 @@ const checkApiKey = (req: express.Request, res: express.Response, next: express.
   const expectedKey = process.env.API_KEY || devKeys.API_KEY || "sk_sync_b4k92jdm10";
   
   if (apiKey !== expectedKey) {
-    res.status(401).json({ error: "Unauthorized: Invalid API Key" });
+    res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+      message: "Authentication failed: Invalid or missing API Key.",
+      details: "Please provide a valid API key via the 'x-api-key' HTTP header or 'api_key' query parameter."
+    });
     return;
   }
   next();
@@ -667,13 +672,36 @@ app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
   try {
     const { projectId } = req.body;
     if (!projectId) {
-      return res.status(400).json({ error: "projectId is required" });
+      return res.status(400).json({
+        success: false,
+        error: "BAD_REQUEST",
+        message: "Missing required field 'projectId' in request body.",
+        details: "Please provide the UUID of the production project you want to create a staging replica for."
+      });
     }
 
     const { data: projectData, error: projectError } = await supabase.from('projects').select('*').eq('id', projectId).single();
-    if (projectError) throw projectError;
-    if (!projectData) {
-      return res.status(404).json({ error: "Original project not found" });
+    if (projectError || !projectData) {
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: `Project with ID '${projectId}' was not found in the database.`,
+        details: "Verify that the project ID is valid and exists in your workspace."
+      });
+    }
+
+    if (projectData.name.endsWith('[STAGING]')) {
+      return res.status(400).json({
+        success: false,
+        error: "ALREADY_STAGING",
+        message: `Project '${projectData.name}' is already a Staging environment.`,
+        details: "You cannot create a staging replica of an existing staging project. Apply your changes directly to this staging project or merge it into production.",
+        project: {
+          id: projectData.id,
+          name: projectData.name,
+          isStaging: true
+        }
+      });
     }
 
     const newProjectId = crypto.randomUUID();
@@ -686,8 +714,16 @@ app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
     const { data: sourceTasks, error: tasksError } = await supabase.from('tasks').select('*').eq('project_id', projectData.id);
     if (tasksError) throw tasksError;
 
+    let replicatedCount = 0;
+    let sqlCount = 0;
+    let functionCount = 0;
+
     if (sourceTasks && sourceTasks.length > 0) {
-      const duplicatedTasksParams = sourceTasks.map(t => ({
+      replicatedCount = sourceTasks.length;
+      sqlCount = sourceTasks.filter((t: any) => t.type === 'sql' || !t.type).length;
+      functionCount = sourceTasks.filter((t: any) => t.type === 'edge_function').length;
+
+      const duplicatedTasksParams = sourceTasks.map((t: any) => ({
         ...t,
         id: crypto.randomUUID(),
         project_id: newProjectId,
@@ -709,11 +745,40 @@ app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
       stateAfter: { projects: [projectData, newProject], tasks: sourceTasks || [] }
     });
 
-    res.json({ id: newProject.id, name: newProject.name });
+    res.json({
+      success: true,
+      message: `Staging branch '${newProjectName}' created successfully with ${replicatedCount} task(s) replicated.`,
+      action: "create_staging",
+      stagingProject: {
+        id: newProject.id,
+        name: newProject.name,
+        createdAt: newProject.created_at,
+        isStaging: true
+      },
+      sourceProject: {
+        id: projectData.id,
+        name: projectData.name
+      },
+      summary: {
+        tasksReplicated: replicatedCount,
+        sqlTasks: sqlCount,
+        edgeFunctions: functionCount
+      },
+      // Backward-compatibility properties
+      id: newProject.id,
+      name: newProject.name,
+      stagingProjectId: newProject.id,
+      stagingProjectName: newProject.name
+    });
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to create staging project:", errDetails);
-    res.status(500).json({ error: "Failed to create staging project", details: errDetails });
+    res.status(500).json({
+      success: false,
+      error: "SERVER_ERROR",
+      message: "An error occurred while creating the staging project.",
+      details: errDetails
+    });
   }
 });
 
@@ -721,11 +786,28 @@ app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
   try {
     const { stagingProjectId, prodProjectId, merges, isAll } = req.body;
     if (!stagingProjectId || !prodProjectId) {
-      return res.status(400).json({ error: "stagingProjectId and prodProjectId are required" });
+      return res.status(400).json({
+        success: false,
+        error: "BAD_REQUEST",
+        message: "Both 'stagingProjectId' and 'prodProjectId' are required in the request body.",
+        details: { received: { stagingProjectId: stagingProjectId || null, prodProjectId: prodProjectId || null } }
+      });
     }
+
+    const [stagingProjRes, prodProjRes] = await Promise.all([
+      supabase.from('projects').select('*').eq('id', stagingProjectId).single(),
+      supabase.from('projects').select('*').eq('id', prodProjectId).single()
+    ]);
+
+    const stagingProjData = stagingProjRes.data;
+    const prodProjData = prodProjRes.data;
 
     const { data: stagingTasks, error: stagingError } = await supabase.from('tasks').select('*').eq('project_id', stagingProjectId);
     if (stagingError) throw stagingError;
+
+    let upsertedCount = 0;
+    let deletedCount = 0;
+    const appliedDetails: any[] = [];
 
     if (merges && Array.isArray(merges)) {
       const dbPromises = merges.map(async (m: any) => {
@@ -746,28 +828,31 @@ app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
             order_index: task.order_index,
             updated_at: Date.now()
           };
+          upsertedCount++;
+          appliedDetails.push({ action: 'upsert', stagingTaskId: task.id, title: task.title, type: task.type });
+
           if (task.production_task_id) {
             return supabase.from('tasks').update(payload).eq('id', task.production_task_id);
           } else {
-            // After inserting to prod, we need to link the staging task so next diff doesn't think it's added again!
             const newProdId = crypto.randomUUID();
             await supabase.from('tasks').insert({
               ...payload,
               id: newProdId,
               created_at: Date.now()
             });
-            // Update staging task to point to the new production task
             return supabase.from('tasks').update({ production_task_id: newProdId }).eq('id', task.id);
           }
         }
         if (m.action === 'delete' && m.prodTaskId) {
-           return supabase.from('tasks').delete().eq('id', m.prodTaskId);
+          deletedCount++;
+          appliedDetails.push({ action: 'delete', prodTaskId: m.prodTaskId });
+          return supabase.from('tasks').delete().eq('id', m.prodTaskId);
         }
       });
       await Promise.all(dbPromises.filter(Boolean));
     } else {
       if (stagingTasks && stagingTasks.length > 0) {
-        const upsertPromises = stagingTasks.map(async (task) => {
+        const upsertPromises = stagingTasks.map(async (task: any) => {
           const payload = {
             title: task.title,
             type: task.type,
@@ -782,6 +867,8 @@ app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
             order_index: task.order_index,
             updated_at: Date.now()
           };
+          upsertedCount++;
+          appliedDetails.push({ action: 'upsert', stagingTaskId: task.id, title: task.title, type: task.type });
 
           if (task.production_task_id) {
             return supabase.from('tasks').update(payload).eq('id', task.production_task_id);
@@ -798,8 +885,8 @@ app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
       }
     }
 
-    if (isAll || !merges) {
-      // Auto-delete the staging project and its tasks to clean up
+    const isStagingDeleted = Boolean(isAll || !merges);
+    if (isStagingDeleted) {
       const { error: deleteTasksError } = await supabase.from('tasks').delete().eq('project_id', stagingProjectId);
       if (deleteTasksError) throw deleteTasksError;
 
@@ -811,18 +898,42 @@ app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
 
     await recordApiVersionBackup({
       action: 'merge',
-      description: isAll ? `Merged all changes from staging into production` : `Merged selected changes into production`,
+      description: isAll ? `Merged all changes from staging into production` : `Merged ${appliedDetails.length} selected changes into production`,
       prodProjectId,
       stagingProjectId,
       stateBefore: {},
       stateAfter: {}
     });
 
-    res.json({ success: true, message: "Merge completed." });
+    const targetProdName = prodProjData?.name || prodProjectId;
+    const sourceStagingName = stagingProjData?.name || stagingProjectId;
+
+    res.json({
+      success: true,
+      message: `Successfully merged ${upsertedCount + deletedCount} change(s) from '${sourceStagingName}' into '${targetProdName}'.`,
+      action: "merge_staging",
+      summary: {
+        isAll: Boolean(isAll),
+        totalChangesApplied: upsertedCount + deletedCount,
+        tasksUpserted: upsertedCount,
+        tasksDeleted: deletedCount,
+        stagingProjectCleanedUp: isStagingDeleted,
+        prodProjectId,
+        prodProjectName: targetProdName,
+        stagingProjectId,
+        stagingProjectName: sourceStagingName
+      },
+      appliedChanges: appliedDetails
+    });
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to merge to production:", errDetails);
-    res.status(500).json({ error: "Failed to merge to production", details: errDetails });
+    res.status(500).json({
+      success: false,
+      error: "MERGE_FAILED",
+      message: "An error occurred while merging staging changes into production.",
+      details: errDetails
+    });
   }
 });
 
@@ -830,8 +941,24 @@ app.post("/api/ai/reject-staging", checkApiKey, async (req, res) => {
   try {
     const { stagingProjectId, prodProjectId, rejects, isAll } = req.body;
     if (!stagingProjectId || !prodProjectId) {
-      return res.status(400).json({ error: "stagingProjectId and prodProjectId are required" });
+      return res.status(400).json({
+        success: false,
+        error: "BAD_REQUEST",
+        message: "Both 'stagingProjectId' and 'prodProjectId' are required in the request body.",
+        details: { received: { stagingProjectId: stagingProjectId || null, prodProjectId: prodProjectId || null } }
+      });
     }
+
+    const [stagingProjRes, prodProjRes] = await Promise.all([
+      supabase.from('projects').select('*').eq('id', stagingProjectId).single(),
+      supabase.from('projects').select('*').eq('id', prodProjectId).single()
+    ]);
+
+    const stagingProjData = stagingProjRes.data;
+    const prodProjData = prodProjRes.data;
+
+    let rejectedCount = 0;
+    const appliedRejections: any[] = [];
 
     if (rejects && Array.isArray(rejects)) {
       const { data: prodTasks, error: prodError } = await supabase.from('tasks').select('*').eq('project_id', prodProjectId);
@@ -839,10 +966,10 @@ app.post("/api/ai/reject-staging", checkApiKey, async (req, res) => {
 
       const dbPromises = rejects.map(async (r: any) => {
         if (r.action === 'upsert' && r.stagingTaskId) {
-          // This task was either modified or added in staging. We reject the change.
           const prodTask = prodTasks?.find(t => t.id === r.prodTaskId);
+          rejectedCount++;
           if (prodTask) {
-            // It was a modification. Revert staging task to prod state.
+            appliedRejections.push({ action: 'revert_to_production', stagingTaskId: r.stagingTaskId, title: prodTask.title });
             const payload = {
               title: prodTask.title,
               type: prodTask.type,
@@ -858,39 +985,40 @@ app.post("/api/ai/reject-staging", checkApiKey, async (req, res) => {
             };
             return supabase.from('tasks').update(payload).eq('id', r.stagingTaskId);
           } else {
-            // It was added in staging. Rejecting means we delete it from staging.
+            appliedRejections.push({ action: 'delete_staging_addition', stagingTaskId: r.stagingTaskId });
             return supabase.from('tasks').delete().eq('id', r.stagingTaskId);
           }
         }
         if (r.action === 'delete' && r.prodTaskId) {
-          // This task was deleted in staging. Rejecting means we restore it in staging.
           const prodTask = prodTasks?.find(t => t.id === r.prodTaskId);
           if (prodTask) {
-             const payload = {
-                title: prodTask.title,
-                type: prodTask.type,
-                sql: prodTask.sql,
-                function_code: prodTask.function_code,
-                description: prodTask.description,
-                edge_files: prodTask.edge_files,
-                edge_secrets: prodTask.edge_secrets,
-                status: prodTask.status,
-                folder_id: prodTask.folder_id,
-                project_id: stagingProjectId,
-                production_task_id: prodTask.id,
-                order_index: prodTask.order_index,
-                created_at: Date.now(),
-                updated_at: Date.now()
-             };
-             return supabase.from('tasks').insert({ ...payload, id: crypto.randomUUID() });
+            rejectedCount++;
+            appliedRejections.push({ action: 'restore_staging_task', prodTaskId: prodTask.id, title: prodTask.title });
+            const payload = {
+              title: prodTask.title,
+              type: prodTask.type,
+              sql: prodTask.sql,
+              function_code: prodTask.function_code,
+              description: prodTask.description,
+              edge_files: prodTask.edge_files,
+              edge_secrets: prodTask.edge_secrets,
+              status: prodTask.status,
+              folder_id: prodTask.folder_id,
+              project_id: stagingProjectId,
+              production_task_id: prodTask.id,
+              order_index: prodTask.order_index,
+              created_at: Date.now(),
+              updated_at: Date.now()
+            };
+            return supabase.from('tasks').insert({ ...payload, id: crypto.randomUUID() });
           }
         }
       });
       await Promise.all(dbPromises.filter(Boolean));
     }
 
-    if (isAll || !rejects) {
-      // Rejecting everything means we delete the staging project
+    const isStagingDeleted = Boolean(isAll || !rejects);
+    if (isStagingDeleted) {
       const { error: deleteTasksError } = await supabase.from('tasks').delete().eq('project_id', stagingProjectId);
       if (deleteTasksError) throw deleteTasksError;
 
@@ -902,18 +1030,42 @@ app.post("/api/ai/reject-staging", checkApiKey, async (req, res) => {
 
     await recordApiVersionBackup({
       action: 'reject',
-      description: isAll ? `Rejected all staging changes` : `Rejected selected staging changes`,
+      description: isAll ? `Rejected all staging changes` : `Rejected ${appliedRejections.length} staging change(s)`,
       prodProjectId,
       stagingProjectId,
       stateBefore: {},
       stateAfter: {}
     });
 
-    res.json({ success: true, message: "Reject completed." });
+    const targetProdName = prodProjData?.name || prodProjectId;
+    const sourceStagingName = stagingProjData?.name || stagingProjectId;
+
+    res.json({
+      success: true,
+      message: isAll 
+        ? `Successfully rejected all staging changes and cleaned up '${sourceStagingName}'.`
+        : `Successfully rejected ${rejectedCount} staging change(s) for '${sourceStagingName}'.`,
+      action: "reject_staging",
+      summary: {
+        isAll: Boolean(isAll),
+        totalRejectionsApplied: isAll ? 'all' : rejectedCount,
+        stagingProjectCleanedUp: isStagingDeleted,
+        prodProjectId,
+        prodProjectName: targetProdName,
+        stagingProjectId,
+        stagingProjectName: sourceStagingName
+      },
+      appliedRejections
+    });
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to reject staging:", errDetails);
-    res.status(500).json({ error: "Failed to reject staging", details: errDetails });
+    res.status(500).json({
+      success: false,
+      error: "REJECT_FAILED",
+      message: "An error occurred while rejecting staging changes.",
+      details: errDetails
+    });
   }
 });
 
@@ -1032,11 +1184,23 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
     const { projectId, title, type, sql, functionCode, description, edgeFiles, edgeSecrets } = req.body;
     
     if (!projectId) {
-      return res.status(400).json({ error: "projectId is required" });
+      return res.status(400).json({
+        success: false,
+        error: "BAD_REQUEST",
+        message: "Missing required field 'projectId' in request body.",
+        details: "Please specify the project ID where the new task should be created."
+      });
     }
 
-    const { data: projData } = await supabase.from('projects').select('name').eq('id', projectId).single();
-    if (!projData) return res.status(404).json({ error: "Project not found" });
+    const { data: projData, error: projError } = await supabase.from('projects').select('*').eq('id', projectId).single();
+    if (projError || !projData) {
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: `Project with ID '${projectId}' was not found in the database.`,
+        details: "Verify that the projectId is correct and exists."
+      });
+    }
 
     let targetProjectId = projectId;
     let autoStaged = false;
@@ -1050,7 +1214,7 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
 
         const { data: sourceTasks } = await supabase.from('tasks').select('*').eq('project_id', projectId);
         if (sourceTasks && sourceTasks.length > 0) {
-            const duplicated = sourceTasks.map(t => ({
+            const duplicated = sourceTasks.map((t: any) => ({
                 ...t,
                 id: crypto.randomUUID(),
                 project_id: targetProjectId,
@@ -1063,14 +1227,16 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
         autoStaged = true;
     }
 
+    const taskType = type || 'sql';
+    const taskTitle = title || 'AI Generated Task';
     const newTask = {
       id: crypto.randomUUID(),
-      title: title || 'AI Generated Task',
-      type: type || 'sql',
+      title: taskTitle,
+      type: taskType,
       sql: sql || '',
       function_code: functionCode || '',
       description: description || 'Generated by AI',
-      edge_files: edgeFiles || (type === 'edge_function' ? [{ id: crypto.randomUUID(), name: 'index.ts', code: '' }] : []),
+      edge_files: edgeFiles || (taskType === 'edge_function' ? [{ id: crypto.randomUUID(), name: 'index.ts', code: '' }] : []),
       edge_secrets: edgeSecrets || [],
       status: 'pending',
       folder_id: null,
@@ -1081,35 +1247,60 @@ app.post("/api/ai/write", checkApiKey, async (req, res) => {
     };
 
     const { error } = await supabase.from('tasks').insert(newTask);
-
     if (error) throw error;
 
     await recordApiVersionBackup({
       action: 'create_task',
-      description: `Created new ${type === 'edge_function' ? 'Edge Function' : 'SQL'} task "${newTask.title || 'Untitled'}" via AI`,
+      description: `Created new ${taskType === 'edge_function' ? 'Edge Function' : 'SQL'} task "${taskTitle}" via AI`,
       prodProjectId: autoStaged ? null : projectId,
       stagingProjectId: autoStaged ? targetProjectId : (projData.name.endsWith('[STAGING]') ? projectId : null),
       stateBefore: { projects: [], tasks: [] },
       stateAfter: { projects: [], tasks: [newTask] }
     });
 
-    if (autoStaged) {
-      return res.json({ 
-        success: true, 
-        task: newTask,
-        message: "Acknowledged: You attempted to write to a Production project. The app automatically created a Staging project for you to make changes safely.",
+    const activeProjectName = autoStaged ? newProjectName : projData.name;
+
+    const responsePayload = {
+      success: true,
+      message: autoStaged
+        ? `Direct write to Production project '${projData.name}' was intercepted for safety. Created Staging branch '${newProjectName}' and added task '${taskTitle}'.`
+        : `Task '${taskTitle}' successfully created in project '${projData.name}'.`,
+      action: "create_task",
+      autoStaged,
+      task: newTask,
+      data: newTask,
+      project: {
+        id: targetProjectId,
+        name: activeProjectName,
+        isStaging: autoStaged || projData.name.endsWith('[STAGING]')
+      },
+      ...(autoStaged ? {
         stagingProject: {
           id: targetProjectId,
           name: newProjectName
         }
-      });
-    }
+      } : {}),
+      summary: {
+        taskId: newTask.id,
+        title: newTask.title,
+        type: newTask.type,
+        status: newTask.status,
+        hasSql: Boolean(newTask.sql?.trim()),
+        edgeFilesCount: newTask.type === 'edge_function' ? (newTask.edge_files?.length || 0) : 0,
+        createdAt: newTask.created_at
+      }
+    };
 
-    res.json({ success: true, task: newTask });
+    res.json(responsePayload);
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to write task via AI API:", errDetails);
-    res.status(500).json({ error: "Failed to write task", details: errDetails });
+    res.status(500).json({
+      success: false,
+      error: "WRITE_FAILED",
+      message: "An error occurred while creating the task.",
+      details: errDetails
+    });
   }
 });
 
@@ -1118,11 +1309,25 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
     const { taskId } = req.params;
     const { title, type, sql, functionCode, description, edgeFiles, edgeSecrets } = req.body;
 
-    const { data: existingTask } = await supabase.from('tasks').select('project_id').eq('id', taskId).single();
-    if (!existingTask) return res.status(404).json({ error: "Task not found" });
+    const { data: existingTask, error: taskError } = await supabase.from('tasks').select('*').eq('id', taskId).single();
+    if (taskError || !existingTask) {
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: `Task with ID '${taskId}' was not found in database.`,
+        details: "Verify that the taskId exists before attempting an update."
+      });
+    }
 
-    const { data: projData } = await supabase.from('projects').select('name').eq('id', existingTask.project_id).single();
-    if (!projData) return res.status(404).json({ error: "Project not found" });
+    const { data: projData, error: projError } = await supabase.from('projects').select('*').eq('id', existingTask.project_id).single();
+    if (projError || !projData) {
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: `Associated project '${existingTask.project_id}' was not found.`,
+        details: "Task references a project that no longer exists in the database."
+      });
+    }
 
     let targetTaskId = taskId;
     let autoStaged = false;
@@ -1165,35 +1370,60 @@ app.put("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
     if (edgeSecrets !== undefined) taskUpdates.edge_secrets = edgeSecrets;
 
     const { error } = await supabase.from('tasks').update(taskUpdates).eq('id', targetTaskId);
-
     if (error) throw error;
+
+    const finalTitle = taskUpdates.title || existingTask.title || 'Task';
 
     await recordApiVersionBackup({
       action: 'update_task',
-      description: `Updated task "${taskUpdates.title || 'Task'}" via AI`,
+      description: `Updated task "${finalTitle}" via AI`,
       prodProjectId: autoStaged ? null : existingTask.project_id,
       stagingProjectId: autoStaged ? targetProjectId : (projData.name.endsWith('[STAGING]') ? existingTask.project_id : null),
-      stateBefore: { projects: [], tasks: [] },
-      stateAfter: { projects: [], tasks: [{ id: targetTaskId, ...taskUpdates }] }
+      stateBefore: { projects: [], tasks: [existingTask] },
+      stateAfter: { projects: [], tasks: [{ id: targetTaskId, ...existingTask, ...taskUpdates }] }
     });
 
-    if (autoStaged) {
-      return res.json({ 
-        success: true, 
-        message: "Acknowledged: You attempted to modify a Production project. The app automatically created a Staging project for you to make changes safely.",
+    const activeProjectName = autoStaged ? newProjectName : projData.name;
+    const modifiedFields = Object.keys(taskUpdates).filter(k => k !== 'updated_at');
+
+    const responsePayload = {
+      success: true,
+      message: autoStaged
+        ? `Direct modification of task in Production project '${projData.name}' was intercepted for safety. Created Staging branch '${newProjectName}' with replicated task '${targetTaskId}' updated.`
+        : `Task '${finalTitle}' successfully updated in project '${projData.name}'.`,
+      action: "update_task",
+      autoStaged,
+      taskId: targetTaskId,
+      task: { id: targetTaskId, ...existingTask, ...taskUpdates },
+      data: { id: targetTaskId, ...existingTask, ...taskUpdates },
+      project: {
+        id: targetProjectId,
+        name: activeProjectName,
+        isStaging: autoStaged || projData.name.endsWith('[STAGING]')
+      },
+      ...(autoStaged ? {
         stagingProject: {
           id: targetProjectId,
           name: newProjectName
         },
         newTaskId: targetTaskId
-      });
-    }
+      } : {}),
+      summary: {
+        fieldsModified: modifiedFields,
+        updatedAt: taskUpdates.updated_at
+      }
+    };
 
-    res.json({ success: true });
+    res.json(responsePayload);
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to update task via AI API:", errDetails);
-    res.status(500).json({ error: "Failed to update task", details: errDetails });
+    res.status(500).json({
+      success: false,
+      error: "UPDATE_FAILED",
+      message: "An error occurred while updating the task.",
+      details: errDetails
+    });
   }
 });
 
@@ -1202,28 +1432,50 @@ app.delete("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
     const { taskId } = req.params;
 
     // First fetch the task to get the project_id
-    const { data: existingTask } = await supabase.from('tasks').select('title, project_id').eq('id', taskId).single();
-    if (!existingTask) {
-      return res.status(404).json({ error: "Task not found" });
+    const { data: existingTask, error: taskError } = await supabase.from('tasks').select('*').eq('id', taskId).single();
+    if (taskError || !existingTask) {
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: `Task with ID '${taskId}' was not found in database.`,
+        details: "Verify that the taskId exists before attempting deletion."
+      });
     }
 
     // Now fetch the project to verify its name
-    const { data: projData } = await supabase.from('projects').select('name').eq('id', existingTask.project_id).single();
-    if (!projData) {
-      return res.status(404).json({ error: "Project not found" });
+    const { data: projData, error: projError } = await supabase.from('projects').select('*').eq('id', existingTask.project_id).single();
+    if (projError || !projData) {
+      return res.status(404).json({
+        success: false,
+        error: "NOT_FOUND",
+        message: `Associated project '${existingTask.project_id}' was not found.`,
+        details: "Task references a project that does not exist in the database."
+      });
     }
 
     // STRICT STAGING RULE: Do NOT allow deleting tasks from Production projects
     if (!projData.name.endsWith('[STAGING]')) {
-      return res.status(403).json({ 
-        error: "Forbidden: You are not allowed to delete tasks from a Production project.",
-        message: "Deletions are only permitted within [STAGING] environments. If you want to remove a task from production, you must first create a staging replica, delete the task there, and then merge the changes."
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN",
+        message: `Cannot delete task '${existingTask.title || taskId}' directly from Production project '${projData.name}'.`,
+        details: "Direct task deletions are prohibited on production branches for data safety. Deletions are only permitted within [STAGING] environments. To delete this task, first create a staging replica (POST /api/ai/create-staging), delete the task inside the staging replica, and then merge into production (POST /api/ai/merge-staging).",
+        task: {
+          id: existingTask.id,
+          title: existingTask.title,
+          projectId: existingTask.project_id,
+          projectName: projData.name
+        },
+        remediation: {
+          step1: "POST /api/ai/create-staging with { projectId: '" + existingTask.project_id + "' }",
+          step2: "DELETE /api/ai/write/<stagingTaskId> within the newly created staging branch",
+          step3: "POST /api/ai/merge-staging to merge and apply the deletion to production"
+        }
       });
     }
 
     // Proceed with deletion
     const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-
     if (error) throw error;
 
     await recordApiVersionBackup({
@@ -1235,11 +1487,31 @@ app.delete("/api/ai/write/:taskId", checkApiKey, async (req, res) => {
       stateAfter: { projects: [], tasks: [] }
     });
 
-    res.json({ success: true, message: "Task successfully deleted." });
+    res.json({
+      success: true,
+      message: `Task '${existingTask.title || taskId}' was successfully deleted from staging project '${projData.name}'.`,
+      action: "delete_task",
+      deletedTask: {
+        id: taskId,
+        title: existingTask.title,
+        type: existingTask.type,
+        projectId: existingTask.project_id,
+        projectName: projData.name
+      },
+      summary: {
+        taskId,
+        deletedAt: Date.now()
+      }
+    });
   } catch (err) {
     const errDetails = err instanceof Error ? err.message : JSON.stringify(err);
     console.error("Failed to delete task via AI API:", errDetails);
-    res.status(500).json({ error: "Failed to delete task", details: errDetails });
+    res.status(500).json({
+      success: false,
+      error: "DELETE_FAILED",
+      message: "An error occurred while deleting the task.",
+      details: errDetails
+    });
   }
 });
 
