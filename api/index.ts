@@ -155,15 +155,71 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
         errorMessage = responseBody?.error || responseBody?.message || (typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody));
       }
 
-      // Build changes summary
+      // Build sanitized request headers map (masking secret keys)
+      const sanitizedHeaders: Record<string, any> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (k === 'cookie') continue;
+        if (k === 'authorization' || k === 'x-api-key' || k === 'apikey') {
+          sanitizedHeaders[k] = typeof v === 'string' && v.length > 8 
+            ? `${v.substring(0, 4)}...${v.substring(v.length - 4)}` 
+            : '***';
+        } else {
+          sanitizedHeaders[k] = v;
+        }
+      }
+
+      // Build changes summary including automatic Agent Notes, _meta & Test Context extraction
       let changesSummary: any = null;
-      if (reqBodyCopy) {
+      if (reqBodyCopy && typeof reqBodyCopy === 'object') {
+        changesSummary = {};
         if (Array.isArray(reqBodyCopy.tasks)) {
-          changesSummary = { tasksCount: reqBodyCopy.tasks.length, action: actionType };
+          changesSummary.tasksCount = reqBodyCopy.tasks.length;
+          changesSummary.action = actionType;
         } else if (reqBodyCopy.taskTitle || reqBodyCopy.title) {
-          changesSummary = { title: reqBodyCopy.taskTitle || reqBodyCopy.title, action: actionType };
+          changesSummary.title = reqBodyCopy.taskTitle || reqBodyCopy.title;
+          changesSummary.action = actionType;
         } else if (responseBody?.stagingProjectId) {
-          changesSummary = { stagingProjectId: responseBody.stagingProjectId, stagingProjectName: responseBody.stagingProjectName };
+          changesSummary.stagingProjectId = responseBody.stagingProjectId;
+          changesSummary.stagingProjectName = responseBody.stagingProjectName;
+        }
+
+        // Automatically extract agent notes / _meta / metadata / reasons / comments
+        const agentNotes = 
+          reqBodyCopy._meta ?? 
+          reqBodyCopy.agent_notes ?? 
+          reqBodyCopy.agentNotes ?? 
+          reqBodyCopy.notes ?? 
+          reqBodyCopy.metadata ?? 
+          reqBodyCopy.reason ?? 
+          reqBodyCopy.comment;
+
+        if (agentNotes !== undefined) {
+          changesSummary.agentNotes = agentNotes;
+        }
+
+        // Capture testing and agent metadata headers
+        const testingBy = req.headers['x-testing-by'] || req.headers['x-agent-name'] || req.headers['x-agent-id'];
+        const testName = req.headers['x-tracker-test-name'] || req.headers['x-test-name'];
+        if (testingBy || testName) {
+          changesSummary.agentHeader = {
+            ...(testingBy ? { testingBy: String(testingBy) } : {}),
+            ...(testName ? { testName: String(testName) } : {})
+          };
+        }
+
+        if (Object.keys(changesSummary).length === 0) {
+          changesSummary = null;
+        }
+      } else {
+        const testingBy = req.headers['x-testing-by'] || req.headers['x-agent-name'] || req.headers['x-agent-id'];
+        const testName = req.headers['x-tracker-test-name'] || req.headers['x-test-name'];
+        if (testingBy || testName) {
+          changesSummary = {
+            agentHeader: {
+              ...(testingBy ? { testingBy: String(testingBy) } : {}),
+              ...(testName ? { testName: String(testName) } : {})
+            }
+          };
         }
       }
 
@@ -178,6 +234,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
         action_type: actionType,
         ip_address: ipAddress,
         user_agent: rawUserAgent,
+        request_headers: sanitizedHeaders,
         request_query: reqQuery,
         request_body: reqBodyCopy,
         response_body: responseBody,

@@ -177,6 +177,7 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
             actionType: d.action_type || d.actionType,
             ipAddress: d.ip_address || d.ipAddress,
             userAgent: d.user_agent || d.userAgent,
+            requestHeaders: typeof d.request_headers === "string" ? JSON.parse(d.request_headers) : (d.request_headers || d.requestHeaders),
             requestQuery: typeof d.request_query === "string" ? JSON.parse(d.request_query) : (d.request_query || d.requestQuery),
             requestBody: typeof d.request_body === "string" ? JSON.parse(d.request_body) : (d.request_body || d.requestBody),
             responseBody: typeof d.response_body === "string" ? JSON.parse(d.response_body) : (d.response_body || d.responseBody),

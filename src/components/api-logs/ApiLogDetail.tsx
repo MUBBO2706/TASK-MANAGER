@@ -13,7 +13,9 @@ import {
   Zap,
   Cpu,
   Layers,
-  FileCode2
+  FileCode2,
+  Bot,
+  Shield
 } from "lucide-react";
 import { ApiLog } from "../../types";
 import { JsonViewer } from "./JsonViewer";
@@ -247,8 +249,11 @@ export function ApiLogDetail({ log, onBack, isMobile = false }: ApiLogDetailProp
               : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-200/50 dark:hover:bg-zinc-900"
           )}
         >
-          <Cpu size={12} />
-          <span>Client & Parameters</span>
+          <Shield size={12} className="text-violet-500" />
+          <span>Headers & Client</span>
+          {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+          )}
         </button>
 
         {log.changesSummary && (
@@ -283,7 +288,38 @@ export function ApiLogDetail({ log, onBack, isMobile = false }: ApiLogDetailProp
 
         {/* Tab 1: Request Payload */}
         {activeTab === "payload" && (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
+            {/* Agent Context & Notes Banner if present */}
+            {(log.changesSummary?.agentNotes || log.changesSummary?.agentHeader || log.requestBody?._meta) && (
+              <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/30 p-3 text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
+                  <Bot size={14} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>Agent Notes & Metadata</span>
+                </div>
+                {log.changesSummary?.agentHeader && (
+                  <div className="flex flex-wrap gap-2 text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
+                    {log.changesSummary.agentHeader.testingBy && (
+                      <span className="bg-emerald-100 dark:bg-emerald-900/50 px-1.5 py-0.5 rounded">
+                        <strong>By:</strong> {log.changesSummary.agentHeader.testingBy}
+                      </span>
+                    )}
+                    {log.changesSummary.agentHeader.testName && (
+                      <span className="bg-emerald-100 dark:bg-emerald-900/50 px-1.5 py-0.5 rounded">
+                        <strong>Test:</strong> {log.changesSummary.agentHeader.testName}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {log.changesSummary?.agentNotes && (
+                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2 rounded border border-emerald-200/60 dark:border-emerald-800/40 text-[11px] font-mono text-slate-800 dark:text-zinc-200 leading-relaxed break-words">
+                    {typeof log.changesSummary.agentNotes === "string" 
+                      ? log.changesSummary.agentNotes 
+                      : JSON.stringify(log.changesSummary.agentNotes, null, 2)}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
                 Incoming Request Payload (JSON)
@@ -358,6 +394,43 @@ export function ApiLogDetail({ log, onBack, isMobile = false }: ApiLogDetailProp
               </div>
             </div>
 
+            {/* HTTP Request Headers */}
+            <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/80 p-3.5 shadow-2xs">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-zinc-200 mb-2.5 flex items-center gap-1.5">
+                <Shield size={13} className="text-violet-500" />
+                <span>HTTP Request Headers</span>
+              </h4>
+              {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 ? (
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  {Object.entries(log.requestHeaders).map(([k, v]) => {
+                    const isCustomHeader = k.startsWith('x-') || k.startsWith('sec-');
+                    return (
+                      <div
+                        key={k}
+                        className={cn(
+                          "flex items-center justify-between p-1.5 rounded text-xs font-mono break-all",
+                          isCustomHeader
+                            ? "bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200/60 dark:border-violet-800/40"
+                            : "bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60"
+                        )}
+                      >
+                        <span className={cn("font-semibold mr-2 shrink-0", isCustomHeader ? "text-violet-700 dark:text-violet-400" : "text-slate-600 dark:text-zinc-400")}>
+                          {k}:
+                        </span>
+                        <span className="text-slate-900 dark:text-zinc-100 select-all">
+                          {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 dark:text-zinc-500 italic">
+                  No custom headers captured for this request.
+                </p>
+              )}
+            </div>
+
             {/* Query Parameters */}
             <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/80 p-3.5 shadow-2xs">
               <h4 className="text-xs font-bold text-slate-800 dark:text-zinc-200 mb-2.5 flex items-center gap-1.5">
@@ -389,9 +462,22 @@ export function ApiLogDetail({ log, onBack, isMobile = false }: ApiLogDetailProp
         {activeTab === "changes" && log.changesSummary && (
           <div className="space-y-2.5">
             <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
-              Database / State Modifications
+              Database / State Modifications & Agent Context
             </h4>
             <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/80 p-3.5 shadow-2xs space-y-2.5">
+              {log.changesSummary.agentNotes && (
+                <div className="p-2.5 rounded bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-xs">
+                  <div className="flex items-center gap-1 font-bold text-emerald-800 dark:text-emerald-300 mb-1">
+                    <Bot size={13} />
+                    <span>Agent Notes / Instructions:</span>
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-800 dark:text-zinc-200 break-words">
+                    {typeof log.changesSummary.agentNotes === "string" 
+                      ? log.changesSummary.agentNotes 
+                      : JSON.stringify(log.changesSummary.agentNotes, null, 2)}
+                  </div>
+                </div>
+              )}
               {log.changesSummary.tasksCount !== undefined && (
                 <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300">
                   <FolderKanban size={13} className="text-sky-500" />

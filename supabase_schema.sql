@@ -157,12 +157,15 @@ CREATE TABLE IF NOT EXISTS api_logs (
   action_type TEXT,
   ip_address TEXT,
   user_agent TEXT,
+  request_headers JSONB DEFAULT '{}'::jsonb,
   request_query JSONB DEFAULT '{}'::jsonb,
   request_body JSONB DEFAULT '{}'::jsonb,
   response_body JSONB DEFAULT '{}'::jsonb,
   error_message TEXT,
   changes_summary JSONB DEFAULT '{}'::jsonb
 );
+
+ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS request_headers JSONB DEFAULT '{}'::jsonb;
 
 ALTER TABLE api_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access to api_logs" ON api_logs;

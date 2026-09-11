@@ -96,6 +96,7 @@ export interface ApiLog {
   actionType?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  requestHeaders?: Record<string, any> | null;
   requestQuery?: Record<string, any>;
   requestBody?: Record<string, any> | null;
   responseBody?: Record<string, any> | null;
@@ -106,6 +107,13 @@ export interface ApiLog {
     action?: string;
     stagingProjectId?: string;
     stagingProjectName?: string;
+    agentNotes?: any;
+    agentHeader?: {
+      testingBy?: string;
+      testName?: string;
+      agentName?: string;
+      [key: string]: any;
+    };
     [key: string]: any;
   } | null;
 }
