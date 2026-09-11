@@ -327,6 +327,19 @@ export function ApiLogDetail({
         <div className="flex-shrink-0 p-3 sm:p-4 border-b border-slate-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-xs">
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+              {/* Back Button to clear selected log */}
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="inline-flex items-center justify-center p-1 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer rounded-md shrink-0 mr-0.5"
+                  aria-label="Back to logs"
+                  title="Clear selection"
+                >
+                  <ChevronLeft size={18} className="shrink-0" />
+                </button>
+              )}
+
               {/* Method Pill */}
               <span
                 className={cn(
@@ -409,45 +422,48 @@ export function ApiLogDetail({
             </div>
           </div>
 
-          {/* Endpoint path display */}
-          <div className="flex items-center justify-between gap-2 bg-slate-100/70 dark:bg-zinc-900/80 px-2.5 py-1.5 rounded-md border border-slate-200/80 dark:border-zinc-800/80 font-mono text-[11.5px] text-slate-800 dark:text-zinc-200">
-            <div className="flex items-center gap-2 min-w-0 truncate select-all">
-              <Globe size={13} className="text-slate-400 dark:text-zinc-500 shrink-0" />
-              <span className="truncate">{log.endpoint}</span>
+          {/* Endpoint path and Action side-by-side on desktop */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center justify-between gap-2 bg-slate-100/70 dark:bg-zinc-900/80 px-2.5 py-1.5 rounded-md border border-slate-200/80 dark:border-zinc-800/80 font-mono text-[11.5px] text-slate-800 dark:text-zinc-200 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 truncate select-all">
+                <Globe size={13} className="text-slate-400 dark:text-zinc-500 shrink-0" />
+                <span className="truncate">{log.endpoint}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyEndpoint}
+                className="text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors shrink-0 p-0.5 cursor-pointer"
+                title="Copy path only"
+              >
+                {copiedEndpoint ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleCopyEndpoint}
-              className="text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors shrink-0 p-0.5 cursor-pointer"
-              title="Copy path only"
-            >
-              {copiedEndpoint ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-            </button>
-          </div>
 
-          {/* Action tag if present */}
-          {log.actionType && (
-            <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px] text-slate-600 dark:text-zinc-400 flex-wrap">
-              <span className="font-semibold text-slate-500 dark:text-zinc-400">Action:</span>
-              <span className="px-1.5 py-0.2 rounded bg-slate-200/60 dark:bg-zinc-800 font-mono text-slate-700 dark:text-zinc-300">
-                {log.actionType}
-              </span>
-              {log.projectId && (
-                <>
-                  <span className="text-slate-300 dark:text-zinc-700">•</span>
-                  <span className="font-semibold text-slate-500 dark:text-zinc-400">Project:</span>
-                  <span className={cn(
-                    "px-1.5 py-0.2 rounded font-mono",
-                    isStagingProject 
-                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
-                      : "bg-slate-200/60 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
-                  )}>
-                    {log.projectId}
-                  </span>
-                </>
-              )}
-            </div>
-          )}
+            {log.actionType && (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-400 shrink-0 bg-slate-100/70 dark:bg-zinc-900/80 px-2.5 py-1.5 rounded-md border border-slate-200/80 dark:border-zinc-800/80">
+                <span className="font-semibold text-slate-500 dark:text-zinc-400">Action:</span>
+                <span className="px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-zinc-800 font-mono text-slate-700 dark:text-zinc-300 font-medium">
+                  {log.actionType}
+                </span>
+                {log.projectId && (
+                  <>
+                    <span className="text-slate-300 dark:text-zinc-700">•</span>
+                    <span className="font-semibold text-slate-500 dark:text-zinc-400">Project:</span>
+                    <span
+                      className={cn(
+                        "px-1.5 py-0.5 rounded font-mono",
+                        isStagingProject
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 font-semibold"
+                          : "bg-slate-200/60 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
+                      )}
+                    >
+                      {log.projectId}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -693,11 +709,11 @@ export function ApiLogDetail({
           <div className="space-y-3">
             {/* Agent Context & Notes - Edge-to-Edge Compact Expandable Accordion */}
             {Boolean(log.changesSummary?.agentNotes || log.changesSummary?.agentHeader || log.requestBody?._meta) && (
-              <div className="-mx-2.5 sm:mx-0 border-y sm:border sm:rounded-lg border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
+              <div className="-mx-2.5 sm:-mx-4 border-y border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
                 <div
                   onClick={() => setIsAgentContextExpanded(!isAgentContextExpanded)}
                   className={cn(
-                    "flex items-center justify-between px-3 sm:px-3.5 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
+                    "flex items-center justify-between px-3 sm:px-4 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
                     !isAgentContextExpanded ? "py-2" : "py-2 border-b border-slate-200/80 dark:border-zinc-800/80"
                   )}
                 >
@@ -775,7 +791,7 @@ export function ApiLogDetail({
                     </div>
 
                     {/* Code block body */}
-                    <div className="p-3 sm:p-3.5 overflow-x-auto max-h-[420px] sm:max-h-[480px] overflow-y-auto overscroll-contain">
+                    <div className="p-3 sm:p-4 overflow-x-auto max-h-[420px] sm:max-h-[480px] overflow-y-auto overscroll-contain">
                       <pre className="text-[11px] sm:text-xs font-mono text-slate-800 dark:text-zinc-200 leading-relaxed tab-size-2 select-text whitespace-pre-wrap break-all">
                         <code>
                           {(() => {
@@ -835,11 +851,11 @@ export function ApiLogDetail({
         {activeTab === "details" && (
           <div className="space-y-3">
             {/* Client & Execution Info Accordion */}
-            <div className="-mx-2.5 sm:mx-0 border-y sm:border sm:rounded-lg border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
+            <div className="-mx-2.5 sm:-mx-4 border-y border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
               <div
                 onClick={() => setIsClientInfoExpanded(!isClientInfoExpanded)}
                 className={cn(
-                  "flex items-center justify-between px-3 sm:px-3.5 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
+                  "flex items-center justify-between px-3 sm:px-4 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
                   !isClientInfoExpanded ? "py-2" : "py-2 border-b border-slate-200/80 dark:border-zinc-800/80"
                 )}
               >
@@ -868,7 +884,7 @@ export function ApiLogDetail({
               {isClientInfoExpanded && (
                 <div className="divide-y divide-slate-200/60 dark:divide-zinc-800/60 bg-transparent">
                   {/* Row 1: Client IP */}
-                  <div className="flex items-center justify-between px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                  <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">
                       Client IP
                     </span>
@@ -892,7 +908,7 @@ export function ApiLogDetail({
                   </div>
 
                   {/* Row 2: Duration */}
-                  <div className="flex items-center justify-between px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                  <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">
                       Execution Latency
                     </span>
@@ -903,7 +919,7 @@ export function ApiLogDetail({
                   </div>
 
                   {/* Row 3: User Agent */}
-                  <div className="flex items-center justify-between gap-3 px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                  <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 shrink-0">
                       User Agent
                     </span>
@@ -919,11 +935,11 @@ export function ApiLogDetail({
             </div>
 
             {/* HTTP Request Headers Accordion */}
-            <div className="-mx-2.5 sm:mx-0 border-y sm:border sm:rounded-lg border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
+            <div className="-mx-2.5 sm:-mx-4 border-y border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
               <div
                 onClick={() => setIsHeadersExpanded(!isHeadersExpanded)}
                 className={cn(
-                  "flex items-center justify-between px-3 sm:px-3.5 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
+                  "flex items-center justify-between px-3 sm:px-4 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
                   !isHeadersExpanded ? "py-2" : "py-2 border-b border-slate-200/80 dark:border-zinc-800/80"
                 )}
               >
@@ -953,7 +969,7 @@ export function ApiLogDetail({
                 <div className="bg-transparent">
                   {/* Filter Search Input (if > 4 headers) */}
                   {headersCount > 4 && (
-                    <div className="px-3 sm:px-3.5 py-1.5 border-b border-slate-200/70 dark:border-zinc-800/70 bg-slate-50/50 dark:bg-zinc-900/40">
+                    <div className="px-3 sm:px-4 py-1.5 border-b border-slate-200/70 dark:border-zinc-800/70 bg-slate-50/50 dark:bg-zinc-900/40">
                       <div className="relative w-full">
                         <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
                         <input
@@ -976,7 +992,7 @@ export function ApiLogDetail({
                         return (
                           <div
                             key={k}
-                            className="px-3 sm:px-3.5 py-1.5 flex flex-col gap-0.5 hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors"
+                            className="px-3 sm:px-4 py-1.5 flex flex-col gap-0.5 hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className={cn(
@@ -1021,11 +1037,11 @@ export function ApiLogDetail({
 
             {/* URL Query Parameters Accordion */}
             {log.requestQuery && Object.keys(log.requestQuery).length > 0 && (
-              <div className="-mx-2.5 sm:mx-0 border-y sm:border sm:rounded-lg border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
+              <div className="-mx-2.5 sm:-mx-4 border-y border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
                 <div
                   onClick={() => setIsQueryParamsExpanded(!isQueryParamsExpanded)}
                   className={cn(
-                    "flex items-center justify-between px-3 sm:px-3.5 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
+                    "flex items-center justify-between px-3 sm:px-4 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
                     !isQueryParamsExpanded ? "py-2" : "py-2 border-b border-slate-200/80 dark:border-zinc-800/80"
                   )}
                 >
@@ -1056,7 +1072,7 @@ export function ApiLogDetail({
                     {Object.entries(log.requestQuery).map(([k, v]) => (
                       <div
                         key={k}
-                        className="flex items-center justify-between px-3 sm:px-3.5 py-1.5 text-xs font-mono hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors"
+                        className="flex items-center justify-between px-3 sm:px-4 py-1.5 text-xs font-mono hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors"
                       >
                         <span className="font-semibold text-[11px] text-slate-600 dark:text-zinc-400 mr-2">{k}</span>
                         <span className="text-[11px] text-slate-900 dark:text-zinc-100 select-all font-medium break-all">{String(v)}</span>
@@ -1088,11 +1104,11 @@ export function ApiLogDetail({
             <div className="space-y-3">
               {/* Database / State Modifications & Agent Context Accordion */}
               {(hasModifications || hasNotes) && (
-                <div className="-mx-2.5 sm:mx-0 border-y sm:border sm:rounded-lg border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
+                <div className="-mx-2.5 sm:-mx-4 border-y border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-2xs">
                   <div
                     onClick={() => setIsChangesExpanded(!isChangesExpanded)}
                     className={cn(
-                      "flex items-center justify-between px-3 sm:px-3.5 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
+                      "flex items-center justify-between px-3 sm:px-4 transition-colors cursor-pointer select-none bg-slate-50/75 dark:bg-zinc-900/60 hover:bg-slate-100/70 dark:hover:bg-zinc-900 gap-2",
                       !isChangesExpanded ? "py-2" : "py-2 border-b border-slate-200/80 dark:border-zinc-800/80"
                     )}
                   >
@@ -1129,7 +1145,7 @@ export function ApiLogDetail({
                     <div className="divide-y divide-slate-200/60 dark:divide-zinc-800/60 bg-transparent">
                       {/* Row 1: Target Staging Environment */}
                       {log.changesSummary.stagingProjectId && (
-                        <div className="flex items-center justify-between px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                           <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">
                             Target Environment
                           </span>
@@ -1148,7 +1164,7 @@ export function ApiLogDetail({
 
                       {/* Row 2: Action */}
                       {(log.changesSummary.action || log.actionType) && (
-                        <div className="flex items-center justify-between px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                           <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">
                             Action
                           </span>
@@ -1160,7 +1176,7 @@ export function ApiLogDetail({
 
                       {/* Row 3: Tasks Affected */}
                       {log.changesSummary.tasksCount !== undefined && (
-                        <div className="flex items-center justify-between px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                           <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400">
                             Tasks Affected
                           </span>
@@ -1173,7 +1189,7 @@ export function ApiLogDetail({
 
                       {/* Row 4: Task Title */}
                       {log.changesSummary.title && (
-                        <div className="flex items-center justify-between gap-3 px-3 sm:px-3.5 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2 text-xs hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                           <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 shrink-0">
                             Task Title
                           </span>
@@ -1190,7 +1206,7 @@ export function ApiLogDetail({
                       {log.changesSummary.agentNotes && (
                         <div className="bg-slate-50/30 dark:bg-zinc-950/60">
                           {/* Code block header bar */}
-                          <div className="flex items-center justify-between px-3 sm:px-3.5 py-1.5 bg-slate-100/70 dark:bg-zinc-900/80 border-b border-slate-200/70 dark:border-zinc-800/70">
+                          <div className="flex items-center justify-between px-3 sm:px-4 py-1.5 bg-slate-100/70 dark:bg-zinc-900/80 border-b border-slate-200/70 dark:border-zinc-800/70">
                             <div className="flex items-center gap-1.5">
                               <Bot size={12} className="text-emerald-500 shrink-0" />
                               <span className="text-[10.5px] font-mono font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
@@ -1227,7 +1243,7 @@ export function ApiLogDetail({
                           </div>
 
                           {/* Code block body */}
-                          <div className="p-3 sm:p-3.5 overflow-x-auto max-h-[420px] sm:max-h-[480px] overflow-y-auto overscroll-contain">
+                          <div className="p-3 sm:p-4 overflow-x-auto max-h-[420px] sm:max-h-[480px] overflow-y-auto overscroll-contain">
                             <pre className="text-[11px] sm:text-xs font-mono text-slate-800 dark:text-zinc-200 leading-relaxed tab-size-2 select-text whitespace-pre-wrap break-all">
                               <code>
                                 {typeof log.changesSummary.agentNotes === "string"

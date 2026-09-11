@@ -88,6 +88,9 @@ export const ApiLogsDetailSkeleton = ({
         <div className="flex-shrink-0 p-3 sm:p-4 border-b border-slate-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70">
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+              {onBack && (
+                <div className="h-5 w-5 bg-slate-200 dark:bg-zinc-800 rounded shrink-0 mr-1" />
+              )}
               <div className="h-5 w-12 bg-slate-200 dark:bg-zinc-800 rounded border border-slate-300/40 dark:border-zinc-700/40" />
               <div className="h-5 w-10 bg-emerald-500/10 dark:bg-emerald-500/15 rounded border border-emerald-500/20" />
               <div className="h-5 w-14 bg-slate-100 dark:bg-zinc-900 rounded border border-slate-200 dark:border-zinc-800" />
@@ -100,13 +103,10 @@ export const ApiLogsDetailSkeleton = ({
             </div>
           </div>
 
-          {/* Endpoint path box skeleton */}
-          <div className="h-7 w-full bg-slate-100/70 dark:bg-zinc-900/80 rounded-md border border-slate-200/80 dark:border-zinc-800/80" />
-
-          {/* Action badge line skeleton */}
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className="h-3.5 w-14 bg-slate-200 dark:bg-zinc-800 rounded" />
-            <div className="h-3.5 w-24 bg-slate-100 dark:bg-zinc-800/70 rounded" />
+          {/* Endpoint path and Action side-by-side skeleton */}
+          <div className="flex items-center gap-2">
+            <div className="h-7 flex-1 bg-slate-100/70 dark:bg-zinc-900/80 rounded-md border border-slate-200/80 dark:border-zinc-800/80" />
+            <div className="h-7 w-32 bg-slate-100/70 dark:bg-zinc-900/80 rounded-md border border-slate-200/80 dark:border-zinc-800/80 shrink-0" />
           </div>
         </div>
       )}
@@ -228,10 +228,6 @@ export function ApiLogsSkeleton({
             <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
               External API Logs
             </h1>
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live Stream
-            </span>
           </div>
         </div>
 

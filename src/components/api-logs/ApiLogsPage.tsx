@@ -564,15 +564,9 @@ export function ApiLogsPage({
           </button>
 
           <div className="flex items-center gap-2 min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                External API Logs
-              </h1>
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Stream
-              </span>
-            </div>
+            <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
+              External API Logs
+            </h1>
           </div>
         </div>
 
