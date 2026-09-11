@@ -35,7 +35,10 @@ interface ApiLogsPageProps {
 
 export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
   const [logs, setLogs] = useState<ApiLog[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const isFirstMountRef = useRef(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -75,9 +78,16 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
   }, []);
 
   // Fetch initial batch of lightweight logs
-  const fetchLogs = useCallback(async (reset = true) => {
+  const fetchLogs = useCallback(async (reset = true, isExplicitRefresh = false) => {
     if (reset) {
-      setIsLoading(true);
+      if (isFirstMountRef.current) {
+        setIsInitialLoading(true);
+      } else {
+        setIsFetching(true);
+      }
+      if (isExplicitRefresh) {
+        setIsRefreshing(true);
+      }
     } else {
       setIsLoadingMore(true);
     }
@@ -127,14 +137,17 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
     } catch (e) {
       console.warn("Failed to fetch API logs:", e);
     } finally {
-      setIsLoading(false);
+      setIsInitialLoading(false);
+      isFirstMountRef.current = false;
+      setIsFetching(false);
+      setIsRefreshing(false);
       setIsLoadingMore(false);
     }
   }, [logs.length, methodFilter, statusFilter, searchQuery]);
 
   useEffect(() => {
     if (isOpen) {
-      fetchLogs(true);
+      fetchLogs(true, false);
     }
   }, [isOpen, methodFilter, statusFilter]);
 
@@ -374,8 +387,8 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
 
   if (!isOpen) return null;
 
-  // Show exact skeleton loader on initial loading
-  if (isLoading && logs.length === 0) {
+  // Show exact skeleton loader on initial loading only
+  if (isInitialLoading && logs.length === 0) {
     return (
       <ApiLogsSkeleton
         sidebarWidth={sidebarWidth}
@@ -481,12 +494,16 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => fetchLogs(true)}
-            disabled={isLoading}
+            onClick={() => fetchLogs(true, true)}
+            disabled={isRefreshing || isFetching}
             className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer"
             title="Refresh Logs"
           >
-            {isLoading ? <Loader size={15} className="animate-spin" /> : <RotateCw size={15} />}
+            {isRefreshing ? (
+              <Loader size={15} className="animate-spin text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <RotateCw size={15} />
+            )}
           </button>
 
           <button
@@ -503,7 +520,7 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
             type="button"
             onClick={() => setShowClearConfirmModal(true)}
             disabled={logs.length === 0}
-            className="p-1.5 text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 transition-colors disabled:opacity-40 cursor-pointer"
+            className="p-1.5 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors disabled:opacity-40 cursor-pointer"
             title="Clear Logs"
           >
             <Trash2 size={15} />
@@ -595,10 +612,15 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
           </div>
 
           {/* Log Stream List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-zinc-900/80">
-            {logs.length === 0 ? (
-              <div className="p-8 text-center">
-                <Terminal size={32} className="text-slate-300 dark:text-zinc-700 mx-auto mb-2 opacity-50 stroke-[1.5]" />
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-zinc-900/80 flex flex-col">
+            {isFetching ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[300px] h-full select-none">
+                <Loader size={26} className="text-emerald-500 animate-spin mb-2.5 stroke-[2.25]" />
+                <p className="text-xs font-medium text-slate-600 dark:text-zinc-400">Loading external API logs...</p>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[300px] h-full select-none">
+                <Terminal size={36} className="text-slate-300 dark:text-zinc-700 mx-auto mb-2.5 opacity-50 stroke-[1.5]" />
                 <h4 className="text-xs font-bold text-slate-700 dark:text-zinc-300">No External API Logs Found</h4>
                 <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1 max-w-xs mx-auto leading-relaxed">
                   Only incoming requests from external servers, cURL scripts, AI Agents, or Postman are recorded here.
@@ -771,7 +793,7 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 shrink-0">
+              <div className="p-2.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 shrink-0">
                 <Trash2 size={20} />
               </div>
               <div>
@@ -796,9 +818,16 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
                 type="button"
                 onClick={handleClearLogs}
                 disabled={isClearing}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isClearing ? "Clearing..." : "Yes, Clear All Logs"}
+                {isClearing ? (
+                  <>
+                    <Loader size={13} className="animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Clear All Logs</span>
+                )}
               </button>
             </div>
           </div>
