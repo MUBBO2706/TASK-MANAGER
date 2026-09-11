@@ -824,6 +824,22 @@ app.post("/api/ai/create-staging", checkApiKey, async (req, res) => {
 
 app.post("/api/ai/merge-staging", checkApiKey, async (req, res) => {
   try {
+    // STRICT SECURITY RULE: Only human users via Web UI can merge to production. External AI calls are blocked.
+    const isUserInitiated = req.headers['x-caller-type'] === 'user-ui' || req.headers['x-requested-by'] === 'user-ui';
+    if (!isUserInitiated) {
+      return res.status(403).json({
+        success: false,
+        error: "FORBIDDEN_AI_MERGE",
+        message: "AI Agents are strictly forbidden from merging staging changes into Production.",
+        details: "Merging into production is restricted to human users via the Web UI (Diff Viewer) to prevent unintended changes to production. Please notify the human user to review the staging diffs and click 'Confirm Merge' inside the Web UI.",
+        remediation: {
+          step1: "Direct the user to open the project in the web application.",
+          step2: "The user reviews the visual diffs in the Diff Viewer UI.",
+          step3: "The user manually confirms and applies the merge to production."
+        }
+      });
+    }
+
     const { stagingProjectId, prodProjectId, merges, isAll } = req.body;
     if (!stagingProjectId || !prodProjectId) {
       return res.status(400).json({

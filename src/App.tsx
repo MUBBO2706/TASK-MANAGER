@@ -850,7 +850,10 @@ export default function App() {
         async () => {
           const response = await fetch(`/api/ai/merge-staging?api_key=${API_KEY_FALLBACK}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'x-caller-type': 'user-ui'
+            },
             body: JSON.stringify({
               stagingProjectId: activeProjectObj.id,
               prodProjectId: productionProject.id,
