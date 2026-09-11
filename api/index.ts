@@ -1,4 +1,6 @@
+import "dotenv/config";
 import express from "express";
+import crypto from "crypto";
 import { createClient } from '@supabase/supabase-js';
 import { diffLines } from 'diff';
 
@@ -92,7 +94,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
   }
 
   const startTime = Date.now();
-  const logId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  const logId = crypto.randomUUID();
   
   const reqMethod = req.method;
   const reqEndpoint = req.originalUrl || req.url;
@@ -250,9 +252,11 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
       if (supabase) {
         supabase.from('api_logs').insert(logEntry).then(({ error }: any) => {
           if (error) {
-            // Silence if table is still being created
+            console.warn("[API Logs] Supabase insert warning:", error.message || error);
           }
-        }).catch(() => {});
+        }).catch((err: any) => {
+          console.warn("[API Logs] Supabase insert exception:", err);
+        });
       }
     } catch (_) {}
   });
@@ -284,6 +288,9 @@ app.get('/api/logs', async (req, res) => {
 
       query = query.range(offset, offset + limit - 1);
       const { data, count, error } = await query;
+      if (error) {
+        console.warn("[API Logs] Failed to query Supabase logs:", error.message || error);
+      }
       if (!error && data) {
         let filtered = data;
         if (search) {

@@ -441,7 +441,12 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
       )}
 
       {/* Top Header Navigation Bar */}
-      <header className="flex-shrink-0 h-12 px-3 sm:px-4 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between gap-2 z-20">
+      <header
+        className={cn(
+          "flex-shrink-0 h-12 px-3 sm:px-4 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between gap-2 z-20",
+          !isDesktop && showDetailMobile && "hidden"
+        )}
+      >
         {/* Left: Back button & Title */}
         <div className="flex items-center gap-2 min-w-0">
           <button
@@ -759,6 +764,7 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
                 setShowDetailMobile(false);
                 setSelectedLogId(null);
               }}
+              onClose={onClose}
             />
           ) : selectedLog ? (
             <ApiLogDetail
@@ -767,6 +773,7 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
                 setShowDetailMobile(false);
                 setSelectedLogId(null);
               }}
+              onClose={onClose}
               isMobile={!isDesktop}
             />
           ) : (

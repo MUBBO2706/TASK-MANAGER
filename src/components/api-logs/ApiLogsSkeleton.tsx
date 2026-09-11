@@ -60,59 +60,85 @@ export const ApiLogsTimelineSkeleton = () => {
 export const ApiLogsDetailSkeleton = ({
   isMobile = false,
   onBack,
+  onClose,
 }: {
   isMobile?: boolean;
   onBack?: () => void;
+  onClose?: () => void;
 }) => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50/50 dark:bg-black overflow-hidden select-none animate-pulse">
       {/* Detail Header Skeleton */}
-      <div className="flex-shrink-0 p-3 sm:p-4 border-b border-slate-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
-            {isMobile && onBack && (
-              <button
-                type="button"
-                onClick={onBack}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-700 dark:text-zinc-300 rounded-md border border-slate-200 dark:border-zinc-800 mr-0.5"
-              >
-                <ChevronLeft size={14} />
-                <span>Logs</span>
-              </button>
+      {isMobile ? (
+        <div className="flex-shrink-0 h-12 px-3 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center justify-between gap-2 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            {onBack && (
+              <div className="h-5 w-5 bg-slate-200 dark:bg-zinc-800 rounded shrink-0" />
             )}
-            <div className="h-5 w-12 bg-slate-200 dark:bg-zinc-800 rounded border border-slate-300/40 dark:border-zinc-700/40" />
-            <div className="h-5 w-10 bg-emerald-500/10 dark:bg-emerald-500/15 rounded border border-emerald-500/20" />
-            <div className="h-5 w-14 bg-slate-100 dark:bg-zinc-900 rounded border border-slate-200 dark:border-zinc-800" />
-            <div className="h-3.5 w-24 bg-slate-100 dark:bg-zinc-800/50 rounded hidden sm:block" />
+            <div className="h-4 w-24 bg-slate-200 dark:bg-zinc-800 rounded shrink-0" />
+          </div>
+          <div className="h-3.5 w-24 bg-slate-100 dark:bg-zinc-800/60 rounded shrink-0" />
+        </div>
+      ) : (
+        <div className="flex-shrink-0 p-3 sm:p-4 border-b border-slate-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/70">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
+              <div className="h-5 w-12 bg-slate-200 dark:bg-zinc-800 rounded border border-slate-300/40 dark:border-zinc-700/40" />
+              <div className="h-5 w-10 bg-emerald-500/10 dark:bg-emerald-500/15 rounded border border-emerald-500/20" />
+              <div className="h-5 w-14 bg-slate-100 dark:bg-zinc-900 rounded border border-slate-200 dark:border-zinc-800" />
+              <div className="h-3.5 w-24 bg-slate-100 dark:bg-zinc-800/50 rounded hidden sm:block" />
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="h-6 w-20 bg-slate-200 dark:bg-zinc-800 rounded-md" />
+              <div className="h-6 w-7 bg-slate-200 dark:bg-zinc-800 rounded-md" />
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="h-6 w-20 bg-slate-200 dark:bg-zinc-800 rounded-md" />
-            <div className="h-6 w-7 bg-slate-200 dark:bg-zinc-800 rounded-md" />
+          {/* Endpoint path box skeleton */}
+          <div className="h-7 w-full bg-slate-100/70 dark:bg-zinc-900/80 rounded-md border border-slate-200/80 dark:border-zinc-800/80" />
+
+          {/* Action badge line skeleton */}
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-3.5 w-14 bg-slate-200 dark:bg-zinc-800 rounded" />
+            <div className="h-3.5 w-24 bg-slate-100 dark:bg-zinc-800/70 rounded" />
           </div>
         </div>
+      )}
 
-        {/* Endpoint path box skeleton */}
-        <div className="h-7 w-full bg-slate-100/70 dark:bg-zinc-900/80 rounded-md border border-slate-200/80 dark:border-zinc-800/80" />
-
-        {/* Action badge line skeleton */}
-        <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-3.5 w-14 bg-slate-200 dark:bg-zinc-800 rounded" />
-          <div className="h-3.5 w-24 bg-slate-100 dark:bg-zinc-800/70 rounded" />
+      {/* Mobile-Only Compact Overview Skeleton */}
+      {isMobile && (
+        <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 space-y-1.5">
+          {/* Row 1: Method, Status, Duration & Copy */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="h-5 w-12 bg-slate-200 dark:bg-zinc-800 rounded border border-slate-300/40 dark:border-zinc-700/40 shrink-0" />
+              <div className="h-5 w-16 bg-emerald-500/10 dark:bg-emerald-500/15 rounded border border-emerald-500/20 shrink-0" />
+              <div className="h-5 w-12 bg-slate-100 dark:bg-zinc-900 rounded border border-slate-200 dark:border-zinc-800 shrink-0" />
+            </div>
+            <div className="h-6 w-16 bg-slate-200 dark:bg-zinc-800 rounded-md shrink-0" />
+          </div>
+          {/* Row 2: Endpoint Path */}
+          <div className="h-3.5 w-4/5 bg-slate-100 dark:bg-zinc-900 rounded" />
+          {/* Row 3: Action & Project */}
+          <div className="flex items-center gap-1.5">
+            <div className="h-4 w-20 bg-slate-100 dark:bg-zinc-900 rounded border border-slate-200/50 dark:border-zinc-800/50" />
+            <div className="h-4 w-24 bg-slate-100 dark:bg-zinc-900 rounded border border-slate-200/50 dark:border-zinc-800/50" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Navigation Tabs Skeleton */}
-      <div className="flex-shrink-0 flex items-center gap-1 px-3 sm:px-4 py-1.5 bg-slate-100/60 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800">
-        <div className="h-6 w-24 bg-white dark:bg-zinc-800 rounded-md shadow-2xs border border-slate-200/80 dark:border-zinc-700" />
-        <div className="h-6 w-26 bg-slate-200/50 dark:bg-zinc-900 rounded-md" />
-        <div className="h-6 w-28 bg-slate-200/50 dark:bg-zinc-900 rounded-md" />
+      <div className="flex-shrink-0 flex items-center gap-1 px-2.5 sm:px-4 py-1.5 bg-slate-100/80 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800">
+        <div className="h-7 w-24 bg-white dark:bg-zinc-800 rounded-lg shadow-2xs border border-slate-200/80 dark:border-zinc-700" />
+        <div className="h-7 w-26 bg-slate-200/50 dark:bg-zinc-900 rounded-lg" />
+        <div className="h-7 w-28 bg-slate-200/50 dark:bg-zinc-900 rounded-lg" />
       </div>
 
       {/* Main Content Area Skeleton */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 space-y-3 sm:space-y-4">
         <div className="h-4 w-44 bg-slate-200 dark:bg-zinc-800 rounded" />
-        <div className="rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 space-y-2.5">
+        <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 space-y-2.5">
           <div className="h-3.5 w-3/4 bg-slate-100 dark:bg-zinc-800/70 rounded" />
           <div className="h-3.5 w-1/2 bg-slate-100 dark:bg-zinc-800/70 rounded" />
           <div className="h-3.5 w-5/6 bg-slate-100 dark:bg-zinc-800/70 rounded" />
