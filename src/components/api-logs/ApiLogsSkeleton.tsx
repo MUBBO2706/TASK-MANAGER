@@ -19,8 +19,11 @@ import { cn } from "../../lib/utils";
 
 export interface ApiLogsSkeletonProps {
   sidebarWidth?: number;
+  onSidebarWidthChange?: (width: number) => void;
   onClose?: () => void;
+  selectedLogId?: string | null;
   isMobileDetail?: boolean;
+  activeTab?: "payload" | "response" | "details" | "changes";
 }
 
 export const ApiLogsTimelineSkeleton = () => {
@@ -61,10 +64,12 @@ export const ApiLogsDetailSkeleton = ({
   isMobile = false,
   onBack,
   onClose,
+  activeTab = "payload",
 }: {
   isMobile?: boolean;
   onBack?: () => void;
   onClose?: () => void;
+  activeTab?: "payload" | "response" | "details" | "changes";
 }) => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50/50 dark:bg-black overflow-hidden select-none animate-pulse">
@@ -130,9 +135,46 @@ export const ApiLogsDetailSkeleton = ({
 
       {/* Navigation Tabs Skeleton */}
       <div className="flex-shrink-0 flex items-center gap-1 px-2.5 sm:px-4 py-1.5 bg-slate-100/80 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800">
-        <div className="h-7 w-24 bg-white dark:bg-zinc-800 rounded-lg shadow-2xs border border-slate-200/80 dark:border-zinc-700" />
-        <div className="h-7 w-26 bg-slate-200/50 dark:bg-zinc-900 rounded-lg" />
-        <div className="h-7 w-28 bg-slate-200/50 dark:bg-zinc-900 rounded-lg" />
+        <div
+          className={cn(
+            "h-7 px-3 rounded-lg flex items-center justify-center transition-all",
+            activeTab === "payload"
+              ? "w-26 bg-white dark:bg-zinc-800 shadow-2xs border border-slate-200/80 dark:border-zinc-700"
+              : "w-24 bg-slate-200/50 dark:bg-zinc-900"
+          )}
+        >
+          <div className="h-3 w-16 bg-slate-200 dark:bg-zinc-700 rounded" />
+        </div>
+        <div
+          className={cn(
+            "h-7 px-3 rounded-lg flex items-center justify-center transition-all",
+            activeTab === "response"
+              ? "w-28 bg-white dark:bg-zinc-800 shadow-2xs border border-slate-200/80 dark:border-zinc-700"
+              : "w-26 bg-slate-200/50 dark:bg-zinc-900"
+          )}
+        >
+          <div className="h-3 w-18 bg-slate-200 dark:bg-zinc-700 rounded" />
+        </div>
+        <div
+          className={cn(
+            "h-7 px-3 rounded-lg flex items-center justify-center transition-all",
+            activeTab === "details"
+              ? "w-32 bg-white dark:bg-zinc-800 shadow-2xs border border-slate-200/80 dark:border-zinc-700"
+              : "w-28 bg-slate-200/50 dark:bg-zinc-900"
+          )}
+        >
+          <div className="h-3 w-22 bg-slate-200 dark:bg-zinc-700 rounded" />
+        </div>
+        <div
+          className={cn(
+            "h-7 px-3 rounded-lg flex items-center justify-center transition-all",
+            activeTab === "changes"
+              ? "w-24 bg-white dark:bg-zinc-800 shadow-2xs border border-slate-200/80 dark:border-zinc-700"
+              : "w-20 bg-slate-200/50 dark:bg-zinc-900"
+          )}
+        >
+          <div className="h-3 w-14 bg-slate-200 dark:bg-zinc-700 rounded" />
+        </div>
       </div>
 
       {/* Main Content Area Skeleton */}
@@ -152,15 +194,18 @@ export const ApiLogsDetailSkeleton = ({
 
 export function ApiLogsSkeleton({
   sidebarWidth = 380,
+  onSidebarWidthChange,
   onClose,
+  selectedLogId,
   isMobileDetail = false,
+  activeTab = "payload",
 }: ApiLogsSkeletonProps) {
   const isDesktop = typeof window !== "undefined" ? window.innerWidth >= 768 : true;
 
-  if (!isDesktop && isMobileDetail) {
+  if (!isDesktop && (isMobileDetail || Boolean(selectedLogId))) {
     return (
       <div className="fixed inset-0 z-[1000] flex flex-col bg-slate-50 dark:bg-black text-slate-900 dark:text-slate-100 font-sans select-none overflow-hidden">
-        <ApiLogsDetailSkeleton isMobile onBack={onClose} />
+        <ApiLogsDetailSkeleton isMobile onBack={onClose} activeTab={activeTab} />
       </div>
     );
   }
@@ -288,17 +333,21 @@ export function ApiLogsSkeleton({
 
         {/* Right Detail Pane Placeholder (Desktop) */}
         {isDesktop && (
-          <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-black min-w-0 overflow-hidden">
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none opacity-50">
-              <Terminal size={40} className="text-slate-400 dark:text-zinc-600 mb-3 opacity-40 stroke-[1.5]" />
-              <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200 tracking-tight">
-                No External API Request Selected
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mt-1.5 leading-relaxed">
-                Select any API call from the real-time stream to inspect its full request payload, response output, client metadata, and state modifications.
-              </p>
+          selectedLogId ? (
+            <ApiLogsDetailSkeleton isMobile={false} onClose={onClose} activeTab={activeTab} />
+          ) : (
+            <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-black min-w-0 overflow-hidden">
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none opacity-50">
+                <Terminal size={40} className="text-slate-400 dark:text-zinc-600 mb-3 opacity-40 stroke-[1.5]" />
+                <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200 tracking-tight">
+                  No External API Request Selected
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mt-1.5 leading-relaxed">
+                  Select any API call from the real-time stream to inspect its full request payload, response output, client metadata, and state modifications.
+                </p>
+              </div>
             </div>
-          </div>
+          )
         )}
       </div>
     </div>

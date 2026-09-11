@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { 
   Terminal, 
   Search, 
@@ -25,15 +26,26 @@ import { ApiLogsSkeleton, ApiLogsDetailSkeleton } from "./ApiLogsSkeleton";
 import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { useHybridState } from "../../hooks/useHybridState";
 
 const CUSTOM_COL_RESIZE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M8 9L5 12L8 15V9Z' fill='%230f172a'/%3E%3Cpath d='M16 9L19 12L16 15V9Z' fill='%230f172a'/%3E%3Cline x1='12' y1='6' x2='12' y2='18' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 12 12, col-resize`;
 
 interface ApiLogsPageProps {
   isOpen: boolean;
   onClose: () => void;
+  sidebarWidth?: number;
+  onSidebarWidthChange?: (width: number) => void;
 }
 
-export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
+export function ApiLogsPage({ 
+  isOpen, 
+  onClose,
+  sidebarWidth: propSidebarWidth,
+  onSidebarWidthChange,
+}: ApiLogsPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlLogId = searchParams.get("logId");
+
   const [logs, setLogs] = useState<ApiLog[]>([]);
   const isFirstMountRef = useRef(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -44,28 +56,44 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
   const [totalCount, setTotalCount] = useState(0);
 
   // Selected Log & Lazy Loading Details Cache
-  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [lastVisitedLogId, setLastVisitedLogId] = useLocalStorage<string | null>(
+    "api-logs-last-visited-id",
+    null
+  );
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(() => urlLogId || null);
   const [loadedDetails, setLoadedDetails] = useState<Record<string, ApiLog>>({});
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [showDetailMobile, setShowDetailMobile] = useState(false);
+  const [showDetailMobile, setShowDetailMobile] = useState<boolean>(Boolean(urlLogId));
 
   // Confirmation Modals
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
-  // Search & Filter controls
-  const [searchQuery, setSearchQuery] = useState("");
-  const [methodFilter, setMethodFilter] = useLocalStorage<string>("api-logs-filter-method", "ALL");
-  const [statusFilter, setStatusFilter] = useLocalStorage<string>("api-logs-filter-status", "ALL");
+  // Search & Filter controls (Persistent across reloads and synced with URL)
+  const [searchQuery, setSearchQuery] = useLocalStorage<string>("api-logs-search-query", "");
+  const [methodFilter, setMethodFilter] = useHybridState<string>("logMethod", "ALL", { enabled: isOpen });
+  const [statusFilter, setStatusFilter] = useHybridState<string>("logStatus", "ALL", { enabled: isOpen });
+  const [activeTab, setActiveTab] = useHybridState<"payload" | "response" | "details" | "changes">(
+    "logTab",
+    "payload",
+    { enabled: isOpen }
+  );
 
   // Sidebar Drag-to-Resize State
-  const [sidebarWidth, setSidebarWidth] = useLocalStorage<number>("api-logs-sidebar-width", 380);
+  const [localSidebarWidth, setLocalSidebarWidth] = useLocalStorage<number>("api-logs-sidebar-width", 380);
+  const sidebarWidth = propSidebarWidth !== undefined ? propSidebarWidth : localSidebarWidth;
+  const setSidebarWidth = onSidebarWidthChange || setLocalSidebarWidth;
+
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
   const nextSidebarWidthRef = useRef<number>(sidebarWidth);
   const rafResizeIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    nextSidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
 
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
@@ -76,6 +104,48 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Ensure apiLogs param is present in URL when API Logs is open
+  useEffect(() => {
+    if (isOpen && searchParams.get("apiLogs") !== "true") {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("apiLogs", "true");
+        return next;
+      }, { replace: true });
+    }
+  }, [isOpen, searchParams, setSearchParams]);
+
+  // Sync selectedLogId when URL param logId changes
+  useEffect(() => {
+    if (urlLogId) {
+      setSelectedLogId(urlLogId);
+      setLastVisitedLogId(urlLogId);
+      setShowDetailMobile(true);
+      if (!loadedDetails[urlLogId]) {
+        loadLogDetail(urlLogId);
+      }
+    } else {
+      setSelectedLogId(null);
+      setShowDetailMobile(false);
+    }
+  }, [urlLogId]);
+
+  // Desktop auto-select fallback: if no URL logId, but lastVisitedLogId exists in loaded logs
+  useEffect(() => {
+    if (isDesktop && !urlLogId && lastVisitedLogId && logs.length > 0) {
+      const exists = logs.some((l) => l.id === lastVisitedLogId);
+      if (exists) {
+        setSelectedLogId(lastVisitedLogId);
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("apiLogs", "true");
+          next.set("logId", lastVisitedLogId);
+          return next;
+        }, { replace: true });
+      }
+    }
+  }, [isDesktop, urlLogId, lastVisitedLogId, logs, setSearchParams]);
 
   // Fetch initial batch of lightweight logs
   const fetchLogs = useCallback(async (reset = true, isExplicitRefresh = false) => {
@@ -199,12 +269,41 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
 
   const handleSelectLog = async (log: ApiLog) => {
     setSelectedLogId(log.id);
-    if (!isDesktop) {
-      setShowDetailMobile(true);
-    }
+    setLastVisitedLogId(log.id);
+    setShowDetailMobile(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("apiLogs", "true");
+      next.set("logId", log.id);
+      return next;
+    }, { replace: true });
+
     if (!loadedDetails[log.id] && !log.requestBody) {
       await loadLogDetail(log.id);
     }
+  };
+
+  const handleMobileBack = () => {
+    setShowDetailMobile(false);
+    setSelectedLogId(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("logId");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleClosePage = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("apiLogs");
+      next.delete("logId");
+      next.delete("logTab");
+      next.delete("logMethod");
+      next.delete("logStatus");
+      return next;
+    }, { replace: true });
+    onClose();
   };
 
   // Realtime Supabase Subscription for new external API calls
@@ -260,17 +359,16 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
       if (e.key === "Escape") {
         if (showClearConfirmModal) {
           setShowClearConfirmModal(false);
-        } else if (showDetailMobile) {
-          setShowDetailMobile(false);
-          setSelectedLogId(null);
+        } else if (showDetailMobile && !isDesktop) {
+          handleMobileBack();
         } else {
-          onClose();
+          handleClosePage();
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, showClearConfirmModal, showDetailMobile, onClose]);
+  }, [isOpen, showClearConfirmModal, showDetailMobile, isDesktop]);
 
   // Clear all logs
   const handleClearLogs = async () => {
@@ -288,6 +386,12 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
       setSelectedLogId(null);
       setTotalCount(0);
       setShowClearConfirmModal(false);
+      setLastVisitedLogId(null);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("logId");
+        return next;
+      }, { replace: true });
     } catch (e) {
       console.error("Failed to clear logs:", e);
     } finally {
@@ -393,8 +497,10 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
     return (
       <ApiLogsSkeleton
         sidebarWidth={sidebarWidth}
-        onClose={onClose}
-        isMobileDetail={!isDesktop && showDetailMobile}
+        onClose={handleClosePage}
+        selectedLogId={selectedLogId}
+        isMobileDetail={!isDesktop && (showDetailMobile || Boolean(selectedLogId))}
+        activeTab={activeTab}
       />
     );
   }
@@ -451,7 +557,7 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
         <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClosePage}
             className="inline-flex items-center justify-center p-1.5 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer rounded-md"
           >
             <ChevronLeft size={18} className="shrink-0" />
@@ -757,24 +863,21 @@ export function ApiLogsPage({ isOpen, onClose }: ApiLogsPageProps) {
             !isDesktop && !showDetailMobile ? "hidden" : "flex"
           )}
         >
-          {isDetailLoading && !selectedLog?.requestBody ? (
+          {isDetailLoading || (selectedLogId && !selectedLog) ? (
             <ApiLogsDetailSkeleton
               isMobile={!isDesktop}
-              onBack={() => {
-                setShowDetailMobile(false);
-                setSelectedLogId(null);
-              }}
-              onClose={onClose}
+              onBack={handleMobileBack}
+              onClose={handleClosePage}
+              activeTab={activeTab}
             />
           ) : selectedLog ? (
             <ApiLogDetail
               log={selectedLog}
-              onBack={() => {
-                setShowDetailMobile(false);
-                setSelectedLogId(null);
-              }}
-              onClose={onClose}
+              onBack={handleMobileBack}
+              onClose={handleClosePage}
               isMobile={!isDesktop}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none">

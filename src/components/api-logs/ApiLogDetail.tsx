@@ -32,10 +32,21 @@ interface ApiLogDetailProps {
   onBack?: () => void;
   onClose?: () => void;
   isMobile?: boolean;
+  activeTab?: "payload" | "response" | "details" | "changes";
+  onTabChange?: (tab: "payload" | "response" | "details" | "changes") => void;
 }
 
-export function ApiLogDetail({ log, onBack, onClose, isMobile = false }: ApiLogDetailProps) {
-  const [activeTab, setActiveTab] = useState<"payload" | "response" | "details" | "changes">("payload");
+export function ApiLogDetail({ 
+  log, 
+  onBack, 
+  onClose, 
+  isMobile = false,
+  activeTab: controlledActiveTab,
+  onTabChange,
+}: ApiLogDetailProps) {
+  const [internalTab, setInternalTab] = useState<"payload" | "response" | "details" | "changes">("payload");
+  const activeTab = controlledActiveTab !== undefined ? controlledActiveTab : internalTab;
+  const setActiveTab = onTabChange || setInternalTab;
   const [copiedCurl, setCopiedCurl] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedEndpoint, setCopiedEndpoint] = useState(false);

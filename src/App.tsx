@@ -49,6 +49,7 @@ import { PWAInstallModal } from "./components/PWAInstallModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { VersionControlPage, VersionControlSkeleton } from "./components/version-control";
 import { ApiLogsPage } from "./components/api-logs/ApiLogsPage";
+import { ApiLogsSkeleton } from "./components/api-logs/ApiLogsSkeleton";
 import SkeletonLoader, { TaskItemSkeleton, EditorSkeleton } from "./components/SkeletonLoader";
 import DiffViewerSkeleton, { NoChangesDiffSkeleton } from "./components/DiffViewerSkeleton";
 import { SqlTask, Project, ProjectSummary, VersionBackup, VersionBackupData, VersionAction } from "./types";
@@ -276,7 +277,7 @@ export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isDiffParam = searchParams.get("diff") === "true";
   const isVersionControlParam = searchParams.get("versionControl") === "true" || Boolean(searchParams.get("versionId"));
-  const isApiLogsParam = searchParams.get("apiLogs") === "true";
+  const isApiLogsParam = searchParams.get("apiLogs") === "true" || Boolean(searchParams.get("logId"));
 
   const [tasks, setTasks] = useState<SqlTask[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -967,6 +968,7 @@ export default function App() {
   const [edgeSidebarWidthState, setEdgeSidebarWidthState] = useLocalStorage("edgeSidebarWidth", 0);
   const [diffSidebarWidth, setDiffSidebarWidth] = useLocalStorage("diffSidebarWidth", 320);
   const [versionSidebarWidth, setVersionSidebarWidth] = useLocalStorage("versionSidebarWidth", 400);
+  const [apiLogsSidebarWidth, setApiLogsSidebarWidth] = useLocalStorage("api-logs-sidebar-width", 380);
   const [isResizing, setIsResizing] = useState(false);
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(isDiffParam);
 
@@ -3139,6 +3141,29 @@ export default function App() {
         />
       );
     }
+    if (isApiLogsParam) {
+      return (
+        <ApiLogsSkeleton
+          sidebarWidth={apiLogsSidebarWidth}
+          onSidebarWidthChange={setApiLogsSidebarWidth}
+          selectedLogId={searchParams.get("logId")}
+          isMobileDetail={Boolean(searchParams.get("logId"))}
+          activeTab={(searchParams.get("logTab") as any) || undefined}
+          onClose={() => {
+            setShowApiLogs(false);
+            setSearchParams(prev => {
+              const next = new URLSearchParams(prev);
+              next.delete("apiLogs");
+              next.delete("logId");
+              next.delete("logTab");
+              next.delete("logMethod");
+              next.delete("logStatus");
+              return next;
+            }, { replace: true });
+          }}
+        />
+      );
+    }
     return (
       <SkeletonLoader
         urlTaskId={urlTaskId}
@@ -4824,9 +4849,15 @@ export default function App() {
           setSearchParams(prev => {
             const next = new URLSearchParams(prev);
             next.delete("apiLogs");
+            next.delete("logId");
+            next.delete("logTab");
+            next.delete("logMethod");
+            next.delete("logStatus");
             return next;
           }, { replace: true });
         }}
+        sidebarWidth={apiLogsSidebarWidth}
+        onSidebarWidthChange={setApiLogsSidebarWidth}
       />
 
       {/* Confirmation Modal for Merge to Prod from More Menu */}
